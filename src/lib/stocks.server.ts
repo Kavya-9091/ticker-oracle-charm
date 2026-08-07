@@ -27,35 +27,59 @@ async function getSession(force = false): Promise<Session> {
   return session;
 }
 
-async function yahoo<T>(url: string, withCrumb: boolean): Promise<T> {
-  const attempt = async (force: boolean) => {
-    const s = await getSession(force);
-    const full = withCrumb ? `${url}&crumb=${encodeURIComponent(s.crumb)}` : url;
-    const res = await fetch(full, { headers: { "User-Agent": UA, cookie: s.cookie } });
+const HOSTS = ["query1", "query2"] as const;
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+// Short-lived response cache so repeated lookups/polling don't hammer the provider.
+const cache = new Map<string, { at: number; json: any }>();
+const CACHE_MS = 20_000;
+
+async function yahoo<T>(path: string, withCrumb: boolean): Promise<T> {
+  const cached = cache.get(path + String(withCrumb));
+  if (cached && Date.now() - cached.at < CACHE_MS) return cached.json as T;
+
+  let lastStatus = 0;
+  for (let attempt = 0; attempt < 4; attempt++) {
+    const host = HOSTS[attempt % HOSTS.length]!;
+    const s = await getSession(attempt > 1);
+    const url =
+      `https://${host}.finance.yahoo.com${path}` +
+      (withCrumb ? `&crumb=${encodeURIComponent(s.crumb)}` : "");
+    const res = await fetch(url, { headers: { "User-Agent": UA, cookie: s.cookie } });
     const text = await res.text();
-    let json: unknown;
+    lastStatus = res.status;
+
+    let json: any = null;
     try {
       json = JSON.parse(text);
     } catch {
-      throw new Error("Unexpected response from market data provider");
+      json = null;
     }
-    return { res, json } as { res: Response; json: any };
-  };
 
-  let { res, json } = await attempt(false);
-  const unauthorized =
-    res.status === 401 ||
-    res.status === 403 ||
-    json?.finance?.error?.code === "Unauthorized" ||
-    json?.quoteSummary?.error;
-  if (unauthorized && withCrumb) {
-    ({ res, json } = await attempt(true));
+    if (json) {
+      const unauthorized =
+        res.status === 401 ||
+        res.status === 403 ||
+        json?.finance?.error?.code === "Unauthorized" ||
+        (withCrumb && json?.quoteSummary?.error?.code === "Unauthorized");
+      if (!unauthorized) {
+        if (json?.chart?.error) throw new Error(json.chart.error.description ?? "Symbol not found");
+        if (json?.quoteSummary?.error)
+          throw new Error(json.quoteSummary.error.description ?? "Financials unavailable");
+        cache.set(path + String(withCrumb), { at: Date.now(), json });
+        return json as T;
+      }
+    }
+
+    if (res.status === 404) throw new Error("Symbol not found");
+    await sleep(400 * (attempt + 1));
   }
-  if (json?.chart?.error) throw new Error(json.chart.error.description ?? "Symbol not found");
-  if (json?.quoteSummary?.error)
-    throw new Error(json.quoteSummary.error.description ?? "Financials unavailable");
-  return json as T;
+
+  if (lastStatus === 429)
+    throw new Error("The market data provider is rate-limiting us right now — try again shortly.");
+  throw new Error(`Could not reach market data provider (status ${lastStatus}).`);
 }
+
 
 const num = (v: unknown): number | null => {
   if (typeof v === "number" && Number.isFinite(v)) return v;
