@@ -149,7 +149,7 @@ export async function fetchSnapshot(symbolRaw: string, range: string): Promise<S
   const interval = range === "1d" ? "5m" : range === "5d" ? "30m" : range === "1mo" ? "1d" : "1wk";
 
   const chart = await yahoo<any>(
-    `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(symbol)}?range=${range}&interval=${interval}`,
+    `/v8/finance/chart/${encodeURIComponent(symbol)}?range=${range}&interval=${interval}`,
     false,
   );
   const result = chart?.chart?.result?.[0];
@@ -167,7 +167,7 @@ export async function fetchSnapshot(symbolRaw: string, range: string): Promise<S
   let summary: any = {};
   try {
     const qs = await yahoo<any>(
-      `https://query1.finance.yahoo.com/v10/finance/quoteSummary/${encodeURIComponent(symbol)}?modules=assetProfile,summaryDetail,financialData,defaultKeyStatistics,price`,
+      `/v10/finance/quoteSummary/${encodeURIComponent(symbol)}?modules=assetProfile,summaryDetail,financialData,defaultKeyStatistics,price`,
       true,
     );
     summary = qs?.quoteSummary?.result?.[0] ?? {};
@@ -249,7 +249,7 @@ export async function searchSymbols(query: string): Promise<SearchHit[]> {
   const q = query.trim();
   if (!q) return [];
   const json = await yahoo<any>(
-    `https://query1.finance.yahoo.com/v1/finance/search?q=${encodeURIComponent(q)}&quotesCount=8&newsCount=0`,
+    `/v1/finance/search?q=${encodeURIComponent(q)}&quotesCount=8&newsCount=0`,
     false,
   );
   return (json?.quotes ?? [])
