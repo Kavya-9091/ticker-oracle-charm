@@ -205,11 +205,12 @@ function Home() {
                   <span className="rounded border border-border px-2 py-0.5 text-xs text-muted-foreground">
                     {data.exchange}
                   </span>
-                  {data.marketState && (
+                  {data.quoteType && (
                     <span className="rounded border border-border px-2 py-0.5 text-xs text-muted-foreground">
-                      {data.marketState}
+                      {data.quoteType}
                     </span>
                   )}
+
                 </div>
                 <p className="mt-1 text-sm text-muted-foreground">{data.name}</p>
               </div>
