@@ -197,7 +197,7 @@ function Home() {
 
       {data && (
         <div className="mt-8 space-y-6">
-          <section className="rounded-xl border border-border bg-panel/70 p-5 backdrop-blur sm:p-6">
+          <section className="panel-surface rounded-xl p-5 sm:p-6">
             <div className="flex flex-wrap items-start justify-between gap-6">
               <div>
                 <div className="flex items-center gap-2">
@@ -351,7 +351,7 @@ function Home() {
           </div>
 
           {data.annual.length > 0 && (
-            <section className="rounded-xl border border-border bg-panel/70 p-5 backdrop-blur sm:p-6">
+            <section className="panel-surface rounded-xl p-5 sm:p-6">
               <h3 className="text-sm font-semibold tracking-wide text-primary uppercase">
                 Annual results {data.profile.industry ? `· ${data.profile.industry}` : ""}
               </h3>
@@ -411,7 +411,7 @@ function Stat({ label, value }: { label: string; value: string }) {
 
 function Panel({ title, children }: { title: string; children: React.ReactNode }) {
   return (
-    <section className="rounded-xl border border-border bg-panel/70 p-5 backdrop-blur">
+    <section className="panel-surface rounded-xl p-5">
       <h3 className="text-sm font-semibold tracking-wide text-primary uppercase">{title}</h3>
       <dl className="mt-3 divide-y divide-border">{children}</dl>
     </section>
