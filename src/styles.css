@@ -4,6 +4,17 @@
 
 @custom-variant dark (&:is(.dark *));
 
+@theme {
+  --font-sans:
+    "Space Grotesk", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, SFMono-Regular, monospace;
+  --color-bull: var(--bull);
+  --color-bear: var(--bear);
+  --color-panel: var(--panel);
+  --color-grid: var(--grid);
+}
+
+
 /*
  * Design system definition.
  *
