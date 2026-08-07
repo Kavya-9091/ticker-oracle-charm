@@ -115,26 +115,27 @@ function Home() {
 
   return (
     <main className="mx-auto w-full max-w-6xl px-4 py-10 sm:px-6 lg:py-14">
-      <header className="flex flex-col gap-6">
-        <div className="flex items-center gap-3">
-          <span className="flex size-10 items-center justify-center rounded-lg bg-primary/15 text-primary">
-            <TrendingUp className="size-5" />
-          </span>
-          <div>
-            <h1 className="text-xl font-semibold tracking-tight">Tickerscope</h1>
-            <p className="text-sm text-muted-foreground">
-              Live quotes and company fundamentals for any listed ticker.
-            </p>
-          </div>
+      <header className="flex flex-col items-center gap-6 text-center">
+        <span className="inline-flex items-center gap-2 rounded-full border border-primary/25 bg-primary/10 px-3.5 py-1.5 text-xs font-medium text-primary">
+          <TrendingUp className="size-3.5" /> Real-Time Market Data
+        </span>
+
+        <div className="space-y-3">
+          <h1 className="text-4xl font-bold tracking-tight sm:text-6xl">
+            Stock <span className="text-primary">Lookup</span>
+          </h1>
+          <p className="mx-auto max-w-md text-base text-muted-foreground sm:text-lg">
+            Enter any stock symbol to get real-time price and financial metrics
+          </p>
         </div>
 
-        <div className="relative">
+        <div className="relative w-full max-w-2xl">
           <form
             onSubmit={(e) => {
               e.preventDefault();
               submit();
             }}
-            className="flex gap-2"
+            className="panel-surface flex items-center gap-2 rounded-2xl p-2"
           >
             <div className="relative flex-1">
               <Search className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground" />
@@ -146,18 +147,18 @@ function Home() {
                 }}
                 onFocus={() => setShowHits(true)}
                 onBlur={() => setTimeout(() => setShowHits(false), 150)}
-                placeholder="Search a symbol or company — AAPL, MSFT, TSLA, RELIANCE.NS"
+                placeholder="Enter symbol — AAPL, MSFT, TSLA"
                 aria-label="Stock symbol"
-                className="h-12 bg-panel pl-9 text-base uppercase placeholder:normal-case"
+                className="tabular h-11 border-0 bg-transparent pl-9 text-base uppercase shadow-none focus-visible:ring-0 placeholder:normal-case placeholder:font-sans"
               />
             </div>
-            <Button type="submit" size="lg" className="h-12 px-6 font-semibold">
-              Look up
+            <Button type="submit" className="h-11 rounded-xl px-6 font-semibold">
+              Search
             </Button>
           </form>
 
           {showHits && (hits.data?.length ?? 0) > 0 && (
-            <ul className="absolute z-20 mt-2 w-full overflow-hidden rounded-lg border border-border bg-popover shadow-xl">
+            <ul className="absolute z-20 mt-2 w-full overflow-hidden rounded-xl border border-border bg-popover text-left shadow-xl">
               {hits.data!.slice(0, 7).map((h) => (
                 <li key={h.symbol}>
                   <button
