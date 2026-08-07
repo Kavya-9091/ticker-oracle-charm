@@ -303,7 +303,6 @@ function Home() {
             </div>
 
             <dl className="mt-5 grid grid-cols-2 gap-4 border-t border-border pt-5 sm:grid-cols-3 lg:grid-cols-6">
-              <Stat label="Open" value={fmtNum(data.open)} />
               <Stat label="Prev close" value={fmtNum(data.previousClose)} />
               <Stat label="Day range" value={`${fmtNum(data.dayLow)} – ${fmtNum(data.dayHigh)}`} />
               <Stat
@@ -312,73 +311,84 @@ function Home() {
               />
               <Stat label="Volume" value={fmtBig(data.volume)} />
               <Stat label="Market cap" value={fmtBig(data.financials.marketCap)} />
+              <Stat label="Shares out" value={fmtBig(data.financials.sharesOutstanding)} />
             </dl>
           </section>
 
           <div className="grid gap-6 lg:grid-cols-3">
             <Panel title="Valuation">
               <Row label="Market cap" value={fmtBig(data.financials.marketCap)} />
+              <Row label="Enterprise value" value={fmtBig(data.financials.enterpriseValue)} />
               <Row label="P/E (trailing)" value={fmtNum(data.financials.trailingPE)} />
               <Row label="P/E (forward)" value={fmtNum(data.financials.forwardPE)} />
+              <Row label="Price / sales" value={fmtNum(data.financials.priceToSales)} />
               <Row label="Price / book" value={fmtNum(data.financials.priceToBook)} />
-              <Row label="EPS (trailing)" value={fmtNum(data.financials.eps)} />
-              <Row label="Book value" value={fmtNum(data.financials.bookValue)} />
-              <Row label="Beta" value={fmtNum(data.financials.beta)} />
-              <Row label="Dividend yield" value={fmtPct(data.financials.dividendYield)} />
+              <Row label="EV / EBITDA" value={fmtNum(data.financials.evToEbitda)} />
+              <Row label="EPS (diluted)" value={fmtNum(data.financials.eps)} />
             </Panel>
 
             <Panel title="Performance">
               <Row label="Revenue (TTM)" value={fmtBig(data.financials.revenue)} />
-              <Row label="Revenue growth" value={fmtPct(data.financials.revenueGrowth)} />
+              <Row label="Revenue growth (YoY)" value={fmtPct(data.financials.revenueGrowth)} />
+              <Row label="Net income" value={fmtBig(data.financials.netIncome)} />
               <Row label="Gross margin" value={fmtPct(data.financials.grossMargin)} />
               <Row label="Operating margin" value={fmtPct(data.financials.operatingMargin)} />
               <Row label="Profit margin" value={fmtPct(data.financials.profitMargin)} />
               <Row label="EBITDA" value={fmtBig(data.financials.ebitda)} />
               <Row label="Free cash flow" value={fmtBig(data.financials.freeCashflow)} />
-              <Row label="Return on equity" value={fmtPct(data.financials.returnOnEquity)} />
             </Panel>
 
-            <Panel title="Balance sheet & analysts">
+            <Panel title="Balance sheet">
               <Row label="Total cash" value={fmtBig(data.financials.totalCash)} />
               <Row label="Total debt" value={fmtBig(data.financials.totalDebt)} />
-              <Row label="Debt / equity" value={fmtNum(data.financials.debtToEquity)} />
-              <Row label="Mean price target" value={fmtNum(data.financials.targetMeanPrice)} />
-              <Row
-                label="Consensus"
-                value={data.financials.recommendation?.replace(/_/g, " ") ?? "—"}
-              />
-              <Row label="Analysts covering" value={fmtNum(data.financials.numberOfAnalysts, 0)} />
+              <Row label="Total assets" value={fmtBig(data.financials.totalAssets)} />
+              <Row label="Total liabilities" value={fmtBig(data.financials.totalLiabilities)} />
+              <Row label="Shareholder equity" value={fmtBig(data.financials.equity)} />
+              <Row label="Debt / equity" value={fmtPct(data.financials.debtToEquity, true)} />
+              <Row label="Return on equity" value={fmtPct(data.financials.returnOnEquity)} />
               <Row label="Sector" value={data.profile.sector ?? "—"} />
-              <Row label="Industry" value={data.profile.industry ?? "—"} />
             </Panel>
           </div>
 
-          {data.profile.summary && (
+          {data.annual.length > 0 && (
             <section className="rounded-xl border border-border bg-panel/70 p-5 backdrop-blur sm:p-6">
               <h3 className="text-sm font-semibold tracking-wide text-primary uppercase">
-                About {data.name}
+                Annual results {data.profile.industry ? `· ${data.profile.industry}` : ""}
               </h3>
-              <p className="mt-3 text-sm leading-relaxed text-muted-foreground">
-                {data.profile.summary}
-              </p>
-              <div className="mt-4 flex flex-wrap gap-x-6 gap-y-2 text-xs text-muted-foreground">
-                {data.profile.country && <span>{data.profile.country}</span>}
-                {data.profile.employees && (
-                  <span>{data.profile.employees.toLocaleString("en-US")} employees</span>
-                )}
-                {data.profile.website && (
-                  <a
-                    href={data.profile.website}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="text-primary hover:underline"
-                  >
-                    {data.profile.website.replace(/^https?:\/\//, "")}
-                  </a>
-                )}
+              <div className="mt-4 overflow-x-auto">
+                <table className="tabular w-full min-w-[420px] text-sm">
+                  <thead>
+                    <tr className="text-xs tracking-wide text-muted-foreground uppercase">
+                      <th className="py-2 text-left font-medium">Fiscal year</th>
+                      <th className="py-2 text-right font-medium">Revenue</th>
+                      <th className="py-2 text-right font-medium">Net income</th>
+                      <th className="py-2 text-right font-medium">Net margin</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-border">
+                    {[...data.annual].reverse().map((row) => (
+                      <tr key={row.period}>
+                        <td className="py-2 text-left">{row.period}</td>
+                        <td className="py-2 text-right">{fmtBig(row.revenue)}</td>
+                        <td className="py-2 text-right">{fmtBig(row.netIncome)}</td>
+                        <td className="py-2 text-right">
+                          {row.revenue && row.netIncome !== null
+                            ? fmtPct(row.netIncome / row.revenue)
+                            : "—"}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
               </div>
+              {data.financials.fiscalPeriod && (
+                <p className="mt-3 text-xs text-muted-foreground">
+                  Latest reported period: {data.financials.fiscalPeriod}
+                </p>
+              )}
             </section>
           )}
+
 
           <p className="pb-4 text-center text-xs text-muted-foreground">
             Market data from Yahoo Finance. Quotes may be delayed by up to 15 minutes depending on
