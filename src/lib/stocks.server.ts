@@ -6,12 +6,41 @@
 const HOSTS = ["query1", "query2"] as const;
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
+// In-isolate cache keeps entries after expiry so we can serve stale data when
+// Yahoo rate-limits us instead of failing the request for every visitor.
 const cache = new Map<string, { at: number; json: any }>();
-const CACHE_MS = 20_000;
+const inflight = new Map<string, Promise<any>>();
+const CACHE_MS = 60_000;
 
-async function yahoo<T>(path: string, cacheMs = CACHE_MS): Promise<T> {
-  const hit = cache.get(path);
-  if (hit && Date.now() - hit.at < cacheMs) return hit.json as T;
+// Cloudflare's Cache API is shared across isolates/requests, so one upstream
+// fetch serves every visitor instead of one per worker instance.
+async function edgeCache(): Promise<Cache | null> {
+  try {
+    const c = (globalThis as any).caches?.default;
+    return c ?? null;
+  } catch {
+    return null;
+  }
+}
+
+const cacheKeyUrl = (path: string) => `https://stock-proxy.local${path}`;
+
+async function fetchFresh(path: string, cacheMs: number): Promise<any> {
+  const edge = await edgeCache();
+  const req = new Request(cacheKeyUrl(path));
+
+  if (edge) {
+    try {
+      const cached = await edge.match(req);
+      if (cached) {
+        const json = await cached.json();
+        cache.set(path, { at: Date.now(), json });
+        return json;
+      }
+    } catch {
+      /* cache read is best-effort */
+    }
+  }
 
   let lastStatus = 0;
   for (let attempt = 0; attempt < 4; attempt++) {
@@ -31,8 +60,24 @@ async function yahoo<T>(path: string, cacheMs = CACHE_MS): Promise<T> {
       if (json?.chart?.error) throw new Error(json.chart.error.description ?? "Symbol not found");
       if (json?.finance?.error && !json?.timeseries)
         throw new Error(json.finance.error.description ?? "Market data unavailable");
+
       cache.set(path, { at: Date.now(), json });
-      return json as T;
+      if (edge) {
+        try {
+          await edge.put(
+            req,
+            new Response(JSON.stringify(json), {
+              headers: {
+                "content-type": "application/json",
+                "cache-control": `public, max-age=${Math.round(cacheMs / 1000)}`,
+              },
+            }),
+          );
+        } catch {
+          /* cache write is best-effort */
+        }
+      }
+      return json;
     }
 
     if (res.status === 404) throw new Error("Symbol not found");
@@ -43,6 +88,27 @@ async function yahoo<T>(path: string, cacheMs = CACHE_MS): Promise<T> {
     throw new Error("The market data provider is rate-limiting us right now — try again shortly.");
   throw new Error(`Could not reach market data provider (status ${lastStatus}).`);
 }
+
+async function yahoo<T>(path: string, cacheMs = CACHE_MS): Promise<T> {
+  const hit = cache.get(path);
+  if (hit && Date.now() - hit.at < cacheMs) return hit.json as T;
+
+  // Coalesce concurrent requests for the same resource into one upstream call.
+  const existing = inflight.get(path);
+  if (existing) return (await existing) as T;
+
+  const p = fetchFresh(path, cacheMs).finally(() => inflight.delete(path));
+  inflight.set(path, p);
+
+  try {
+    return (await p) as T;
+  } catch (err) {
+    // Serve stale data rather than an error when the upstream is throttling.
+    if (hit && !/not found/i.test(String((err as Error).message))) return hit.json as T;
+    throw err;
+  }
+}
+
 
 const fin = (v: number | null | undefined) =>
   typeof v === "number" && Number.isFinite(v) ? v : null;
