@@ -71,9 +71,13 @@ function Home() {
   const snapshot = useQuery({
     queryKey: ["snapshot", symbol, range],
     queryFn: () => fetchSnapshot({ data: { symbol, range } }),
-    refetchInterval: 30_000,
-    retry: false,
+    refetchInterval: 60_000,
+    refetchOnWindowFocus: false,
+    staleTime: 30_000,
+    retry: 1,
+    retryDelay: 1500,
   });
+
 
   const [debounced, setDebounced] = useState("");
   useEffect(() => {
