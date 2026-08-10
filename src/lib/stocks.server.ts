@@ -376,7 +376,7 @@ export type SearchHit = {
   industry: string | null;
 };
 
-export async function searchSymbols(query: string): Promise<SearchHit[]> {
+async function searchYahooSymbols(query: string): Promise<SearchHit[]> {
   const q = query.trim();
   if (!q) return [];
   const json = await yahoo<any>(
@@ -394,3 +394,37 @@ export async function searchSymbols(query: string): Promise<SearchHit[]> {
       industry: x.industry ?? null,
     }));
 }
+
+const notFound = (err: unknown) => /not found/i.test(String((err as Error)?.message ?? ""));
+
+// Yahoo aggressively rate-limits shared server IPs. When it fails for any reason
+// other than a genuinely unknown symbol, fall back to Nasdaq's public API so
+// every visitor still gets real data instead of a rate-limit error.
+export async function fetchSnapshot(symbolRaw: string, range: string): Promise<Snapshot> {
+  try {
+    return await fetchYahooSnapshot(symbolRaw, range);
+  } catch (err) {
+    const { fetchNasdaqSnapshot } = await import("./nasdaq.server");
+    try {
+      return await fetchNasdaqSnapshot(symbolRaw, range);
+    } catch (fallbackErr) {
+      throw notFound(err) || !notFound(fallbackErr) ? (err as Error) : (fallbackErr as Error);
+    }
+  }
+}
+
+export async function searchSymbols(query: string): Promise<SearchHit[]> {
+  try {
+    const hits = await searchYahooSymbols(query);
+    if (hits.length) return hits;
+  } catch {
+    /* fall through to Nasdaq */
+  }
+  try {
+    const { searchNasdaq } = await import("./nasdaq.server");
+    return await searchNasdaq(query);
+  } catch {
+    return [];
+  }
+}
+
