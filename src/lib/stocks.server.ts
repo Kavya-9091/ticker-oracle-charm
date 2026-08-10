@@ -229,7 +229,7 @@ const ANNUAL = [
   "annualCapitalExpenditure",
 ];
 
-export async function fetchSnapshot(symbolRaw: string, range: string): Promise<Snapshot> {
+async function fetchYahooSnapshot(symbolRaw: string, range: string): Promise<Snapshot> {
   const symbol = symbolRaw.trim().toUpperCase();
   const interval = range === "1d" ? "5m" : range === "5d" ? "30m" : range === "1mo" ? "1d" : "1wk";
 
