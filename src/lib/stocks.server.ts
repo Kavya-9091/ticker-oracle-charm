@@ -267,7 +267,7 @@ async function fetchYahooSnapshot(symbolRaw: string, range: string): Promise<Sna
 
   let profile = { sector: null as string | null, industry: null as string | null };
   try {
-    const hits = await searchSymbols(symbol);
+    const hits = await searchYahooSymbols(symbol);
     const match = hits.find((h) => h.symbol === (meta.symbol ?? symbol));
     if (match) profile = { sector: match.sector, industry: match.industry };
   } catch {
