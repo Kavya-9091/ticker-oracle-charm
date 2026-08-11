@@ -1,13 +1,15 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 
-const snapshotInput = z.object({
-  symbol: z.string().min(1).max(20),
-  range: z.enum(["1d", "5d", "1mo", "1y", "5y"]).default("1mo"),
-});
-
 export const getSnapshot = createServerFn({ method: "GET" })
-  .inputValidator((data: unknown) => snapshotInput.parse(data))
+  .inputValidator((data: unknown) =>
+    z
+      .object({
+        symbol: z.string().min(1).max(20),
+        range: z.enum(["1d", "5d", "1mo", "1y", "5y"]).default("1mo"),
+      })
+      .parse(data),
+  )
   .handler(async ({ data }) => {
     const { fetchSnapshot } = await import("./stocks.server");
     return fetchSnapshot(data.symbol, data.range);
