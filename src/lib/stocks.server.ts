@@ -395,7 +395,10 @@ async function searchYahooSymbols(query: string): Promise<SearchHit[]> {
     }));
 }
 
-const notFound = (err: unknown) => /not found/i.test(String((err as Error)?.message ?? ""));
+const notFound = (err: unknown) =>
+  /not found|no market data|no data|unknown symbol|invalid symbol/i.test(
+    String((err as Error)?.message ?? ""),
+  );
 
 // Nasdaq is primary because Yahoo aggressively rate-limits shared server IPs.
 // Yahoo remains a fallback for symbols or temporary failures Nasdaq cannot serve.
@@ -407,7 +410,11 @@ export async function fetchSnapshot(symbolRaw: string, range: string): Promise<S
     try {
       return await fetchYahooSnapshot(symbolRaw, range);
     } catch (fallbackError) {
-      if (notFound(primaryError) && notFound(fallbackError)) throw primaryError;
+      if (notFound(primaryError) || notFound(fallbackError)) {
+        throw new Error(
+          `We couldn\u2019t find market data for \u201C${symbolRaw.trim().toUpperCase()}\u201D. Check the symbol and try again.`,
+        );
+      }
       throw new Error("Live market data is temporarily unavailable. Please try again shortly.");
     }
   }

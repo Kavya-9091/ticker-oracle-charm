@@ -54,7 +54,7 @@ const LISTINGS: Listing[] = [
   { symbol: "ABNB", name: "Airbnb, Inc." },
   { symbol: "SHOP", name: "Shopify Inc." },
   { symbol: "PYPL", name: "PayPal Holdings, Inc." },
-  { symbol: "SQ", name: "Block, Inc." },
+  { symbol: "XYZ", name: "Block, Inc." },
   { symbol: "COIN", name: "Coinbase Global, Inc." },
   { symbol: "PLTR", name: "Palantir Technologies Inc." },
   { symbol: "SNOW", name: "Snowflake Inc." },
