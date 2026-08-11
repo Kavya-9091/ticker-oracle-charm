@@ -120,7 +120,7 @@ function Home() {
   };
 
   return (
-    <div className="mx-auto grid w-full max-w-[92rem] gap-6 px-4 py-10 sm:px-6 lg:grid-cols-[minmax(0,1fr)_20rem] lg:py-14">
+    <div className="mx-auto grid w-full max-w-[92rem] gap-6 px-4 py-10 sm:px-6 md:grid-cols-[minmax(0,1fr)_18rem] lg:grid-cols-[minmax(0,1fr)_20rem] lg:py-14">
     <main className="min-w-0">
       <header className="flex flex-col items-center gap-6 text-center">
 
