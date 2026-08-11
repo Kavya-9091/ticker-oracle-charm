@@ -8,6 +8,8 @@ import { ArrowDownRight, ArrowUpRight, Loader2, Search, TrendingUp } from "lucid
 import { getSnapshot, searchTickers } from "@/lib/stocks.functions";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { StockList } from "@/components/stock-list";
+
 
 export const Route = createFileRoute("/")({
   head: () => ({
