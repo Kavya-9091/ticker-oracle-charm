@@ -404,8 +404,11 @@ function Home() {
         </div>
       )}
     </main>
+    <StockList active={symbol} onSelect={(s) => submit(s)} />
+    </div>
   );
 }
+
 
 function Stat({ label, value }: { label: string; value: string }) {
   return (
