@@ -118,8 +118,10 @@ function Home() {
   };
 
   return (
-    <main className="mx-auto w-full max-w-6xl px-4 py-10 sm:px-6 lg:py-14">
+    <div className="mx-auto grid w-full max-w-[92rem] gap-6 px-4 py-10 sm:px-6 lg:grid-cols-[minmax(0,1fr)_20rem] lg:py-14">
+    <main className="min-w-0">
       <header className="flex flex-col items-center gap-6 text-center">
+
         <span className="inline-flex items-center gap-2 rounded-full border border-primary/25 bg-primary/10 px-3.5 py-1.5 text-xs font-medium text-primary">
           <TrendingUp className="size-3.5" /> Real-Time Market Data
         </span>
