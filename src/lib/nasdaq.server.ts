@@ -8,20 +8,32 @@ const UA =
   "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0 Safari/537.36";
 
 const cache = new Map<string, { at: number; json: any }>();
+const inflight = new Map<string, Promise<any>>();
 
 async function nq<T>(path: string, cacheMs = 60_000): Promise<T> {
   const hit = cache.get(path);
   if (hit && Date.now() - hit.at < cacheMs) return hit.json as T;
-  const res = await fetch(`https://api.nasdaq.com${path}`, {
-    headers: { "user-agent": UA, accept: "application/json" },
-  });
-  if (!res.ok) {
+  const existing = inflight.get(path);
+  if (existing) return (await existing) as T;
+
+  const request = (async () => {
+    const res = await fetch(`https://api.nasdaq.com${path}`, {
+      headers: { "user-agent": UA, accept: "application/json" },
+      signal: AbortSignal.timeout(8_000),
+    });
+    if (!res.ok) throw new Error(`Nasdaq request failed (status ${res.status})`);
+    const json = await res.json();
+    cache.set(path, { at: Date.now(), json });
+    return json;
+  })().finally(() => inflight.delete(path));
+
+  inflight.set(path, request);
+  try {
+    return (await request) as T;
+  } catch (error) {
     if (hit) return hit.json as T;
-    throw new Error(`Nasdaq request failed (status ${res.status})`);
+    throw error;
   }
-  const json = await res.json();
-  cache.set(path, { at: Date.now(), json });
-  return json as T;
 }
 
 const num = (v: unknown): number | null => {
@@ -107,21 +119,19 @@ async function fetchCandles(symbol: string, range: string): Promise<Candle[]> {
 export async function fetchNasdaqSnapshot(symbolRaw: string, range: string): Promise<Snapshot> {
   const symbol = symbolRaw.trim().toUpperCase();
 
-  const info = await nq<any>(`/api/quote/${symbol}/info?assetclass=stocks`, 45_000);
+  const [info, summaryRes, finRes, candles] = await Promise.all([
+    nq<any>(`/api/quote/${symbol}/info?assetclass=stocks`, 45_000),
+    nq<any>(`/api/quote/${symbol}/summary?assetclass=stocks`, 5 * 60_000).catch(() => null),
+    nq<any>(`/api/company/${symbol}/financials?frequency=1`, 30 * 60_000).catch(() => null),
+    fetchCandles(symbol, range).catch(() => [] as Candle[]),
+  ]);
   const d = info?.data;
   if (!d?.symbol) throw new Error(`No market data found for "${symbol}"`);
 
-  const [summaryRes, finRes, candles] = await Promise.allSettled([
-    nq<any>(`/api/quote/${symbol}/summary?assetclass=stocks`, 5 * 60_000),
-    nq<any>(`/api/company/${symbol}/financials?frequency=1`, 30 * 60_000),
-    fetchCandles(symbol, range),
-  ]);
-
-  const s: Record<string, any> =
-    summaryRes.status === "fulfilled" ? (summaryRes.value?.data?.summaryData ?? {}) : {};
+  const s: Record<string, any> = summaryRes?.data?.summaryData ?? {};
   const sv = (key: string) => (typeof s[key]?.value === "string" ? (s[key].value as string) : null);
 
-  const fin = finRes.status === "fulfilled" ? finRes.value?.data : null;
+  const fin = finRes?.data ?? null;
   const income: Table = fin?.incomeStatementTable ?? null;
   const balance: Table = fin?.balanceSheetTable ?? null;
   const cash: Table = fin?.cashFlowTable ?? null;
@@ -204,7 +214,7 @@ export async function fetchNasdaqSnapshot(symbolRaw: string, range: string): Pro
     fiftyTwoWeekHigh: num(hi52),
     fiftyTwoWeekLow: num(lo52),
     regularMarketTime: null,
-    candles: candles.status === "fulfilled" ? candles.value : [],
+    candles,
     annual,
     profile: { sector: sv("Sector"), industry: sv("Industry") },
     financials: {

@@ -397,32 +397,32 @@ async function searchYahooSymbols(query: string): Promise<SearchHit[]> {
 
 const notFound = (err: unknown) => /not found/i.test(String((err as Error)?.message ?? ""));
 
-// Yahoo aggressively rate-limits shared server IPs. When it fails for any reason
-// other than a genuinely unknown symbol, fall back to Nasdaq's public API so
-// every visitor still gets real data instead of a rate-limit error.
+// Nasdaq is primary because Yahoo aggressively rate-limits shared server IPs.
+// Yahoo remains a fallback for symbols or temporary failures Nasdaq cannot serve.
 export async function fetchSnapshot(symbolRaw: string, range: string): Promise<Snapshot> {
+  const { fetchNasdaqSnapshot } = await import("./nasdaq.server");
   try {
-    return await fetchYahooSnapshot(symbolRaw, range);
-  } catch (err) {
-    const { fetchNasdaqSnapshot } = await import("./nasdaq.server");
+    return await fetchNasdaqSnapshot(symbolRaw, range);
+  } catch (primaryError) {
     try {
-      return await fetchNasdaqSnapshot(symbolRaw, range);
-    } catch (fallbackErr) {
-      throw notFound(err) || !notFound(fallbackErr) ? (err as Error) : (fallbackErr as Error);
+      return await fetchYahooSnapshot(symbolRaw, range);
+    } catch (fallbackError) {
+      if (notFound(primaryError) && notFound(fallbackError)) throw primaryError;
+      throw new Error("Live market data is temporarily unavailable. Please try again shortly.");
     }
   }
 }
 
 export async function searchSymbols(query: string): Promise<SearchHit[]> {
   try {
-    const hits = await searchYahooSymbols(query);
+    const { searchNasdaq } = await import("./nasdaq.server");
+    const hits = await searchNasdaq(query);
     if (hits.length) return hits;
   } catch {
-    /* fall through to Nasdaq */
+    /* fall through to Yahoo */
   }
   try {
-    const { searchNasdaq } = await import("./nasdaq.server");
-    return await searchNasdaq(query);
+    return await searchYahooSymbols(query);
   } catch {
     return [];
   }
