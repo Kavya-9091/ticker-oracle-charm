@@ -402,7 +402,37 @@ const notFound = (err: unknown) =>
 
 // Nasdaq is primary because Yahoo aggressively rate-limits shared server IPs.
 // Yahoo remains a fallback for symbols or temporary failures Nasdaq cannot serve.
+const snapCache = new Map<string, { at: number; snap: Snapshot }>();
+const snapInflight = new Map<string, Promise<Snapshot>>();
+const SNAP_MS = 25_000;
+
+// One assembled snapshot is reused for every visitor asking for the same
+// symbol/range within the TTL, so N concurrent viewers cost one upstream fetch.
 export async function fetchSnapshot(symbolRaw: string, range: string): Promise<Snapshot> {
+  const key = `${symbolRaw.trim().toUpperCase()}|${range}`;
+  const hit = snapCache.get(key);
+  if (hit && Date.now() - hit.at < SNAP_MS) return hit.snap;
+
+  const existing = snapInflight.get(key);
+  if (existing) return await existing;
+
+  const p = buildSnapshot(symbolRaw, range)
+    .then((snap) => {
+      snapCache.set(key, { at: Date.now(), snap });
+      return snap;
+    })
+    .finally(() => snapInflight.delete(key));
+  snapInflight.set(key, p);
+
+  try {
+    return await p;
+  } catch (err) {
+    if (hit && !notFound(err)) return hit.snap;
+    throw err;
+  }
+}
+
+async function buildSnapshot(symbolRaw: string, range: string): Promise<Snapshot> {
   const { fetchNasdaqSnapshot } = await import("./nasdaq.server");
   try {
     return await fetchNasdaqSnapshot(symbolRaw, range);
