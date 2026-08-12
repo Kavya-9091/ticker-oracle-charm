@@ -10,6 +10,18 @@ const UA =
 const cache = new Map<string, { at: number; json: any }>();
 const inflight = new Map<string, Promise<any>>();
 
+// Cloudflare's Cache API is shared across isolates, so one upstream fetch serves
+// every visitor — that's what keeps latency flat as concurrency grows.
+function edgeCache(): Cache | null {
+  try {
+    return ((globalThis as any).caches?.default as Cache) ?? null;
+  } catch {
+    return null;
+  }
+}
+
+const keyUrl = (path: string) => `https://nasdaq-proxy.local${path}`;
+
 async function nq<T>(path: string, cacheMs = 60_000): Promise<T> {
   const hit = cache.get(path);
   if (hit && Date.now() - hit.at < cacheMs) return hit.json as T;
@@ -17,13 +29,43 @@ async function nq<T>(path: string, cacheMs = 60_000): Promise<T> {
   if (existing) return (await existing) as T;
 
   const request = (async () => {
+    const edge = edgeCache();
+    const req = new Request(keyUrl(path));
+    if (edge) {
+      try {
+        const cached = await edge.match(req);
+        if (cached) {
+          const json = await cached.json();
+          cache.set(path, { at: Date.now(), json });
+          return json;
+        }
+      } catch {
+        /* cache read is best-effort */
+      }
+    }
+
     const res = await fetch(`https://api.nasdaq.com${path}`, {
       headers: { "user-agent": UA, accept: "application/json" },
-      signal: AbortSignal.timeout(8_000),
+      signal: AbortSignal.timeout(5_000),
     });
     if (!res.ok) throw new Error(`Nasdaq request failed (status ${res.status})`);
     const json = await res.json();
     cache.set(path, { at: Date.now(), json });
+    if (edge) {
+      try {
+        await edge.put(
+          req,
+          new Response(JSON.stringify(json), {
+            headers: {
+              "content-type": "application/json",
+              "cache-control": `public, max-age=${Math.max(1, Math.round(cacheMs / 1000))}`,
+            },
+          }),
+        );
+      } catch {
+        /* cache write is best-effort */
+      }
+    }
     return json;
   })().finally(() => inflight.delete(path));
 
@@ -92,10 +134,13 @@ async function resolveInfo(symbol: string): Promise<{ info: any; assetclass: Ass
     if (!info?.data?.symbol) throw new Error(`No market data found for "${symbol}"`);
     return { info, assetclass };
   });
-  const settled = await Promise.allSettled(attempts);
-  const ok = settled.find((r) => r.status === "fulfilled");
-  if (ok && ok.status === "fulfilled") return ok.value;
-  throw new Error(`No market data found for "${symbol}"`);
+  // Race instead of allSettled: return as soon as one asset class answers,
+  // so ETFs don't wait on the failing "stocks" probe (and vice versa).
+  try {
+    return await Promise.any(attempts);
+  } catch {
+    throw new Error(`No market data found for "${symbol}"`);
+  }
 }
 
 async function fetchCandles(

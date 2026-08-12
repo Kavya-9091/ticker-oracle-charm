@@ -83,7 +83,7 @@ function Home() {
 
   const [debounced, setDebounced] = useState("");
   useEffect(() => {
-    const id = setTimeout(() => setDebounced(input.trim()), 250);
+    const id = setTimeout(() => setDebounced(input.trim()), 400);
     return () => clearTimeout(id);
   }, [input]);
 
@@ -91,6 +91,8 @@ function Home() {
     queryKey: ["search", debounced],
     queryFn: () => fetchSearch({ data: { query: debounced } }),
     enabled: debounced.length >= 1 && showHits,
+    staleTime: 5 * 60_000,
+    gcTime: 10 * 60_000,
     retry: false,
   });
 
