@@ -134,10 +134,13 @@ async function resolveInfo(symbol: string): Promise<{ info: any; assetclass: Ass
     if (!info?.data?.symbol) throw new Error(`No market data found for "${symbol}"`);
     return { info, assetclass };
   });
-  const settled = await Promise.allSettled(attempts);
-  const ok = settled.find((r) => r.status === "fulfilled");
-  if (ok && ok.status === "fulfilled") return ok.value;
-  throw new Error(`No market data found for "${symbol}"`);
+  // Race instead of allSettled: return as soon as one asset class answers,
+  // so ETFs don't wait on the failing "stocks" probe (and vice versa).
+  try {
+    return await Promise.any(attempts);
+  } catch {
+    throw new Error(`No market data found for "${symbol}"`);
+  }
 }
 
 async function fetchCandles(
