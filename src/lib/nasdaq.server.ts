@@ -83,10 +83,29 @@ function windowDays(range: string): number {
 
 const iso = (d: Date) => d.toISOString().slice(0, 10);
 
-async function fetchCandles(symbol: string, range: string): Promise<Candle[]> {
+// Nasdaq keys every quote endpoint by asset class; ETFs/indices 400 on "stocks".
+type AssetClass = "stocks" | "etf";
+
+async function resolveInfo(symbol: string): Promise<{ info: any; assetclass: AssetClass }> {
+  const attempts = (["stocks", "etf"] as AssetClass[]).map(async (assetclass) => {
+    const info = await nq<any>(`/api/quote/${symbol}/info?assetclass=${assetclass}`, 45_000);
+    if (!info?.data?.symbol) throw new Error(`No market data found for "${symbol}"`);
+    return { info, assetclass };
+  });
+  const settled = await Promise.allSettled(attempts);
+  const ok = settled.find((r) => r.status === "fulfilled");
+  if (ok && ok.status === "fulfilled") return ok.value;
+  throw new Error(`No market data found for "${symbol}"`);
+}
+
+async function fetchCandles(
+  symbol: string,
+  range: string,
+  assetclass: AssetClass,
+): Promise<Candle[]> {
   if (range === "1d") {
     try {
-      const j = await nq<any>(`/api/quote/${symbol}/chart?assetclass=stocks`, 60_000);
+      const j = await nq<any>(`/api/quote/${symbol}/chart?assetclass=${assetclass}`, 60_000);
       const pts = (j?.data?.chart ?? [])
         .map((p: any) => ({ t: Number(p?.x), c: num(p?.y) }))
         .filter((p: any) => Number.isFinite(p.t) && p.c !== null) as Candle[];
@@ -99,7 +118,7 @@ async function fetchCandles(symbol: string, range: string): Promise<Candle[]> {
   const to = new Date();
   const from = new Date(to.getTime() - windowDays(range) * 86_400_000);
   const j = await nq<any>(
-    `/api/quote/${symbol}/historical?assetclass=stocks&fromdate=${iso(from)}&todate=${iso(
+    `/api/quote/${symbol}/historical?assetclass=${assetclass}&fromdate=${iso(from)}&todate=${iso(
       to,
     )}&limit=9999`,
     5 * 60_000,
@@ -119,12 +138,17 @@ async function fetchCandles(symbol: string, range: string): Promise<Candle[]> {
 export async function fetchNasdaqSnapshot(symbolRaw: string, range: string): Promise<Snapshot> {
   const symbol = symbolRaw.trim().toUpperCase();
 
-  const [info, summaryRes, finRes, candles] = await Promise.all([
-    nq<any>(`/api/quote/${symbol}/info?assetclass=stocks`, 45_000),
-    nq<any>(`/api/quote/${symbol}/summary?assetclass=stocks`, 5 * 60_000).catch(() => null),
-    nq<any>(`/api/company/${symbol}/financials?frequency=1`, 30 * 60_000).catch(() => null),
-    fetchCandles(symbol, range).catch(() => [] as Candle[]),
+  const { info, assetclass } = await resolveInfo(symbol);
+  const isFund = assetclass === "etf";
+
+  const [summaryRes, finRes, candles] = await Promise.all([
+    nq<any>(`/api/quote/${symbol}/summary?assetclass=${assetclass}`, 5 * 60_000).catch(() => null),
+    isFund
+      ? Promise.resolve(null)
+      : nq<any>(`/api/company/${symbol}/financials?frequency=1`, 30 * 60_000).catch(() => null),
+    fetchCandles(symbol, range, assetclass).catch(() => [] as Candle[]),
   ]);
+
   const d = info?.data;
   if (!d?.symbol) throw new Error(`No market data found for "${symbol}"`);
 
