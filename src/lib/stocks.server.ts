@@ -465,3 +465,68 @@ export async function searchSymbols(query: string): Promise<SearchHit[]> {
   }
 }
 
+
+// --- Extra reads used by the AI agent tools -------------------------------
+// Daily OHLCV bars (needed for technical indicators — the snapshot chart uses
+// coarser intervals for long ranges).
+export type DailyBar = { t: number; c: number; h?: number; l?: number; v?: number };
+
+export async function fetchDailyBars(symbolRaw: string, range = "1y"): Promise<DailyBar[]> {
+  const symbol = symbolRaw.trim().toUpperCase();
+  try {
+    const json = await yahoo<any>(
+      `/v8/finance/chart/${encodeURIComponent(symbol)}?range=${range}&interval=1d`,
+      10 * 60_000,
+    );
+    const r = json?.chart?.result?.[0];
+    const stamps: number[] = r?.timestamp ?? [];
+    const q = r?.indicators?.quote?.[0] ?? {};
+    const bars: DailyBar[] = [];
+    for (let i = 0; i < stamps.length; i++) {
+      const c = q.close?.[i];
+      if (typeof c !== "number" || !Number.isFinite(c)) continue;
+      bars.push({
+        t: stamps[i]! * 1000,
+        c,
+        h: typeof q.high?.[i] === "number" ? q.high[i] : undefined,
+        l: typeof q.low?.[i] === "number" ? q.low[i] : undefined,
+        v: typeof q.volume?.[i] === "number" ? q.volume[i] : undefined,
+      });
+    }
+    if (bars.length) return bars;
+  } catch {
+    /* fall through to the snapshot candles below */
+  }
+  const snap = await fetchSnapshot(symbol, range === "1y" ? "1y" : "5y");
+  return snap.candles.map((c) => ({ t: c.t, c: c.c }));
+}
+
+export type NewsItem = {
+  title: string;
+  publisher: string;
+  publishedAt: number | null;
+  link: string;
+  relatedTickers: string[];
+};
+
+export async function fetchNews(query: string, count = 10): Promise<NewsItem[]> {
+  const q = query.trim();
+  if (!q) return [];
+  try {
+    const json = await yahoo<any>(
+      `/v1/finance/search?q=${encodeURIComponent(q)}&quotesCount=0&newsCount=${count}`,
+      5 * 60_000,
+    );
+    return (json?.news ?? [])
+      .filter((n: any) => n?.title)
+      .map((n: any) => ({
+        title: String(n.title),
+        publisher: String(n.publisher ?? ""),
+        publishedAt: typeof n.providerPublishTime === "number" ? n.providerPublishTime * 1000 : null,
+        link: String(n.link ?? ""),
+        relatedTickers: Array.isArray(n.relatedTickers) ? n.relatedTickers.map(String) : [],
+      }));
+  } catch {
+    return [];
+  }
+}
