@@ -1,14 +1,15 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
-import { useQuery } from "@tanstack/react-query";
+import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import { useEffect, useMemo, useState } from "react";
 import { Area, AreaChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
-import { ArrowDownRight, ArrowUpRight, Loader2, Search, TrendingUp } from "lucide-react";
+import { ArrowDownRight, ArrowUpRight, Loader2, Search } from "lucide-react";
 
 import { getSnapshot, searchTickers } from "@/lib/stocks.functions";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { StockList } from "@/components/stock-list";
+import { AiStockAgent } from "@/components/ai-stock-agent";
 
 
 export const Route = createFileRoute("/")({
@@ -76,8 +77,9 @@ function Home() {
     refetchInterval: 60_000,
     refetchOnWindowFocus: false,
     staleTime: 30_000,
-    retry: 1,
-    retryDelay: 1500,
+    placeholderData: keepPreviousData,
+    retry: 2,
+    retryDelay: 600,
   });
 
 
@@ -126,10 +128,6 @@ function Home() {
     <main className="min-w-0">
       <header className="flex flex-col items-center gap-6 text-center">
 
-        <span className="inline-flex items-center gap-2 rounded-full border border-primary/25 bg-primary/10 px-3.5 py-1.5 text-xs font-medium text-primary">
-          <TrendingUp className="size-3.5" /> Real-Time Market Data
-        </span>
-
         <div className="space-y-3">
           <h1 className="text-4xl font-bold tracking-tight sm:text-6xl">
             Stock <span className="text-primary">Lookup</span>
@@ -138,7 +136,9 @@ function Home() {
             Enter any stock symbol to get real-time price and financial metrics
           </p>
         </div>
+      </header>
 
+      <section className="mt-10">
         <div className="relative w-full max-w-2xl">
           <form
             onSubmit={(e) => {
@@ -189,18 +189,18 @@ function Home() {
             </ul>
           )}
         </div>
-      </header>
+      </section>
 
       {snapshot.isError && (
         <div
           role="alert"
           className="mt-8 rounded-lg border border-destructive/40 bg-destructive/10 px-4 py-3 text-sm"
         >
-          {(snapshot.error as Error).message || "Could not load that symbol."}
+          {(snapshot.error as Error).message || "Market data is temporarily unavailable."}
         </div>
       )}
 
-      {snapshot.isPending && (
+      {snapshot.isPending && !data && (
         <div className="mt-16 flex items-center justify-center gap-2 text-muted-foreground">
           <Loader2 className="size-4 animate-spin" /> Loading market data…
         </div>
@@ -409,6 +409,11 @@ function Home() {
       )}
     </main>
     <StockList active={symbol} onSelect={(s) => submit(s)} />
+    <AiStockAgent
+      selectedSymbol={symbol}
+      {...(data?.name ? { selectedName: data.name } : {})}
+      onSelectStock={(s) => submit(s)}
+    />
     </div>
   );
 }
@@ -440,3 +445,4 @@ function Row({ label, value }: { label: string; value: string }) {
     </div>
   );
 }
+

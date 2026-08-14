@@ -45,7 +45,9 @@ async function fetchFresh(path: string, cacheMs: number): Promise<any> {
   let lastStatus = 0;
   for (let attempt = 0; attempt < 4; attempt++) {
     const host = HOSTS[attempt % HOSTS.length]!;
-    const res = await fetch(`https://${host}.finance.yahoo.com${path}`);
+    const res = await fetch(`https://${host}.finance.yahoo.com${path}`, {
+      signal: AbortSignal.timeout(4_500),
+    });
     lastStatus = res.status;
     const text = await res.text();
 
@@ -434,15 +436,17 @@ export async function fetchSnapshot(symbolRaw: string, range: string): Promise<S
 
 async function buildSnapshot(symbolRaw: string, range: string): Promise<Snapshot> {
   const { fetchNasdaqSnapshot } = await import("./nasdaq.server");
+  const { findUniverse } = await import("./universe");
+  const symbol = symbolRaw.trim().toUpperCase();
   try {
     return await fetchNasdaqSnapshot(symbolRaw, range);
   } catch (primaryError) {
     try {
       return await fetchYahooSnapshot(symbolRaw, range);
     } catch (fallbackError) {
-      if (notFound(primaryError) || notFound(fallbackError)) {
+      if (!findUniverse(symbol) && (notFound(primaryError) || notFound(fallbackError))) {
         throw new Error(
-          `We couldn\u2019t find market data for \u201C${symbolRaw.trim().toUpperCase()}\u201D. Check the symbol and try again.`,
+          `We couldn\u2019t find market data for \u201C${symbol}\u201D. Check the symbol and try again.`,
         );
       }
       throw new Error("Live market data is temporarily unavailable. Please try again shortly.");
