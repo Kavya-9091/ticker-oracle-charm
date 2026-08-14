@@ -32,8 +32,31 @@ jobs:
       - name: Build static app
         run: GITHUB_PAGES=true bun run build
 
-      - name: Add single-page fallback
-        run: cp .output/public/index.html .output/public/404.html
+      - name: Add GitHub Pages entry
+        run: |
+          cat > .output/public/index.html <<'HTML'
+          <!doctype html>
+          <html lang="en">
+            <head>
+              <meta charset="utf-8" />
+              <meta name="viewport" content="width=device-width, initial-scale=1" />
+              <title>Stock Insight</title>
+              <meta http-equiv="refresh" content="0; url=https://ticker-oracle-charm.lovable.app/" />
+              <link rel="canonical" href="https://ticker-oracle-charm.lovable.app/" />
+              <script>
+                window.location.replace("https://ticker-oracle-charm.lovable.app/");
+              </script>
+            </head>
+            <body>
+              <main>
+                <h1>Stock Insight</h1>
+                <p>Opening the live Stock Insight app.</p>
+                <a href="https://ticker-oracle-charm.lovable.app/">Open live app</a>
+              </main>
+            </body>
+          </html>
+          HTML
+          cp .output/public/index.html .output/public/404.html
 
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3
