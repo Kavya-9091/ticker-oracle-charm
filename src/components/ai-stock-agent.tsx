@@ -1,4 +1,3 @@
-import { useServerFn } from "@tanstack/react-start";
 import { useMutation } from "@tanstack/react-query";
 import { useEffect, useMemo, useRef, useState } from "react";
 import ReactMarkdown from "react-markdown";
@@ -19,7 +18,6 @@ import {
   X,
 } from "lucide-react";
 
-import { askStockAgent } from "@/lib/ai-agent.functions";
 import { hasRemoteApi, remoteApi } from "@/lib/frontend-api";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
@@ -101,7 +99,6 @@ What would you like to explore?`;
 }
 
 export function AiStockAgent({ selectedSymbol, selectedName, onSelectStock }: Props) {
-  const ask = useServerFn(askStockAgent);
   const [input, setInput] = useState("");
   const [open, setOpen] = useState(false);
   const [minimized, setMinimized] = useState(false);
@@ -153,7 +150,9 @@ export function AiStockAgent({ selectedSymbol, selectedName, onSelectStock }: Pr
           .map((m) => ({ role: m.role, content: m.content })),
       };
       try {
-        return hasRemoteApi ? await remoteApi.askStockAgent(data) : await ask({ data });
+        if (hasRemoteApi) return await remoteApi.askStockAgent(data);
+        const { askStockAgent } = await import("@/lib/ai-agent.functions");
+        return await askStockAgent({ data });
       } finally {
         window.clearInterval(id);
       }

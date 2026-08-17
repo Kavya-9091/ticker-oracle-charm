@@ -1,11 +1,9 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useServerFn } from "@tanstack/react-start";
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import { useEffect, useMemo, useState } from "react";
 import { Area, AreaChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { ArrowDownRight, ArrowUpRight, Loader2, Search } from "lucide-react";
 
-import { getSnapshot, searchTickers } from "@/lib/stocks.functions";
 import { hasRemoteApi, remoteApi } from "@/lib/frontend-api";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -69,15 +67,13 @@ function Home() {
   const [range, setRange] = useState<Range>("1mo");
   const [showHits, setShowHits] = useState(false);
 
-  const fetchSnapshot = useServerFn(getSnapshot);
-  const fetchSearch = useServerFn(searchTickers);
-
   const snapshot = useQuery({
     queryKey: ["snapshot", symbol, range],
-    queryFn: () =>
-      hasRemoteApi
-        ? remoteApi.getSnapshot({ symbol, range })
-        : fetchSnapshot({ data: { symbol, range } }),
+    queryFn: async () => {
+      if (hasRemoteApi) return remoteApi.getSnapshot({ symbol, range });
+      const { getSnapshot } = await import("@/lib/stocks.functions");
+      return getSnapshot({ data: { symbol, range } });
+    },
     refetchInterval: 60_000,
     refetchOnWindowFocus: false,
     staleTime: 30_000,
@@ -95,8 +91,11 @@ function Home() {
 
   const hits = useQuery({
     queryKey: ["search", debounced],
-    queryFn: () =>
-      hasRemoteApi ? remoteApi.searchTickers(debounced) : fetchSearch({ data: { query: debounced } }),
+    queryFn: async () => {
+      if (hasRemoteApi) return remoteApi.searchTickers(debounced);
+      const { searchTickers } = await import("@/lib/stocks.functions");
+      return searchTickers({ data: { query: debounced } });
+    },
     enabled: debounced.length >= 1 && showHits,
     staleTime: 5 * 60_000,
     gcTime: 10 * 60_000,
