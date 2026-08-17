@@ -69,7 +69,7 @@ const tokeniseSymbols = (text: string) => {
   const out = new Set<string>();
   const upper = text.toUpperCase();
   for (const [name, symbol] of knownNames) if (upper.includes(name)) out.add(symbol);
-  for (const match of text.matchAll(/\b[A-Z]{2,5}(?:\.NS)?\b/g)) {
+  for (const match of text.matchAll(/\b[A-Z]{1,5}(?:\.[A-Z]{1,3})?\b/g)) {
     const raw = match[0]!.toUpperCase();
     if (
       [
@@ -88,7 +88,7 @@ const tokeniseSymbols = (text: string) => {
       ].includes(raw)
     )
       continue;
-    const universe = UNIVERSE.find((u) => u.symbol === raw || u.symbol.replace(".NS", "") === raw);
+    const universe = UNIVERSE.find((u) => u.symbol === raw || u.symbol.split(".")[0] === raw);
     if (universe) out.add(universe.symbol);
   }
   return Array.from(out).slice(0, 5);
