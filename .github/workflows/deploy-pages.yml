@@ -32,7 +32,8 @@ jobs:
       - name: Build GitHub Pages app
         env:
           GITHUB_PAGES: "true"
-          VITE_API_URL: ${{ vars.VITE_API_URL || 'https://ticker-oracle-charm.lovable.app' }}
+          VITE_STATIC_FRONTEND: "true"
+          VITE_API_URL: ${{ vars.VITE_API_URL }}
         run: bun run build:pages
 
       - name: Upload artifact

@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { Area, AreaChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { ArrowDownRight, ArrowUpRight, Loader2, Search } from "lucide-react";
 
-import { hasRemoteApi, remoteApi } from "@/lib/frontend-api";
+import { hasRemoteApi, isStaticFrontend, missingBackendMessage, remoteApi } from "@/lib/frontend-api";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { StockList } from "@/components/stock-list";
@@ -71,6 +71,7 @@ function Home() {
     queryKey: ["snapshot", symbol, range],
     queryFn: async () => {
       if (hasRemoteApi) return remoteApi.getSnapshot({ symbol, range });
+      if (isStaticFrontend) throw new Error(missingBackendMessage());
       const { getSnapshot } = await import("@/lib/stocks.functions");
       return getSnapshot({ data: { symbol, range } });
     },
@@ -93,6 +94,7 @@ function Home() {
     queryKey: ["search", debounced],
     queryFn: async () => {
       if (hasRemoteApi) return remoteApi.searchTickers(debounced);
+      if (isStaticFrontend) throw new Error(missingBackendMessage());
       const { searchTickers } = await import("@/lib/stocks.functions");
       return searchTickers({ data: { query: debounced } });
     },

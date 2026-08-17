@@ -13,16 +13,20 @@ export type SnapshotRequest = {
 };
 
 const configuredApiUrl = import.meta.env["VITE_API_URL"]?.trim();
+const staticFrontend = import.meta.env["VITE_STATIC_FRONTEND"] === "true";
 
 export const API_URL = configuredApiUrl ? configuredApiUrl.replace(/\/+$/, "") : "";
 
 export const hasRemoteApi = Boolean(API_URL);
+export const isStaticFrontend = staticFrontend;
+
+export function missingBackendMessage() {
+  return "Backend API is not configured for this GitHub Pages build. Deploy the backend and set VITE_API_URL in GitHub repository variables.";
+}
 
 async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> {
   if (!API_URL) {
-    throw new Error(
-      "Chat service is currently unavailable. Configure VITE_API_URL to a deployed backend.",
-    );
+    throw new Error(missingBackendMessage());
   }
 
   const response = await fetch(`${API_URL}${path}`, {
