@@ -8,6 +8,7 @@
     "build": "vite build",
     "build:dev": "vite build --mode development",
     "build:pages": "vite build --config vite.pages.config.ts && node scripts/write-pages-entry.mjs",
+    "deploy:backend": "npm run build && npx wrangler deploy --config .output/server/wrangler.json",
     "preview": "vite preview",
     "lint": "eslint .",
     "format": "prettier --write ."
