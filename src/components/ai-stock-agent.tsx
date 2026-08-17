@@ -469,7 +469,7 @@ export function AiStockAgent({ selectedSymbol, selectedName, onSelectStock }: Pr
         <button
           type="button"
           onClick={() => setMinimized(false)}
-          className="fixed left-4 bottom-24 z-[80] flex items-center gap-2 rounded-xl border border-primary/30 bg-background/95 px-4 py-2 text-sm font-semibold shadow-2xl backdrop-blur-xl sm:left-6"
+          className="fixed right-4 bottom-24 z-[80] flex items-center gap-2 rounded-xl border border-primary/30 bg-background/95 px-4 py-2 text-sm font-semibold shadow-2xl backdrop-blur-xl sm:right-6"
         >
           <Sparkles className="size-4 text-primary" />
           AI
@@ -484,11 +484,10 @@ export function AiStockAgent({ selectedSymbol, selectedName, onSelectStock }: Pr
           setMinimized(false);
         }}
         title="Ask Stock Insight AI"
-        className="fixed left-4 bottom-5 z-[80] flex h-14 items-center gap-2 rounded-full border border-primary/40 bg-primary px-5 text-sm font-bold text-primary-foreground shadow-[0_0_28px_oklch(0.72_0.2_148/0.35)] transition-transform hover:scale-105 sm:left-6"
+        className="fixed right-4 bottom-5 z-[80] flex size-14 items-center justify-center rounded-full border border-primary/40 bg-primary text-primary-foreground shadow-[0_0_28px_oklch(0.72_0.2_148/0.35)] transition-transform hover:scale-105 sm:right-6"
         aria-label="Ask Stock Insight AI"
       >
         {open ? <Maximize2 className="size-5" /> : <BarChart3 className="size-5" />}
-        <span>AI Chat</span>
       </button>
     </>
   );
