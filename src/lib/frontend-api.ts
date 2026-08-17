@@ -41,6 +41,12 @@ async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> {
   }
 
   if (!response.ok) {
+    if (response.status === 404) {
+      throw new Error(
+        `Backend API was not found at ${API_URL}${path}. Deploy the latest backend code or update VITE_API_URL.`,
+      );
+    }
+
     const message =
       typeof payload === "object" &&
       payload !== null &&
