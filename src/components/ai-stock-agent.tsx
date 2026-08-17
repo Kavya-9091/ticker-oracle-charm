@@ -20,6 +20,7 @@ import {
 } from "lucide-react";
 
 import { askStockAgent } from "@/lib/ai-agent.functions";
+import { hasRemoteApi, remoteApi } from "@/lib/frontend-api";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 
@@ -143,17 +144,16 @@ export function AiStockAgent({ selectedSymbol, selectedName, onSelectStock }: Pr
   const mutation = useMutation({
     mutationFn: async ({ message, baseMessages }: AskVariables) => {
       const id = window.setInterval(() => setLoadingIndex((v) => (v + 1) % loadingLines.length), 900);
+      const data = {
+        message,
+        selectedSymbol,
+        history: baseMessages
+          .slice(0, -1)
+          .slice(-12)
+          .map((m) => ({ role: m.role, content: m.content })),
+      };
       try {
-        return await ask({
-          data: {
-            message,
-            selectedSymbol,
-            history: baseMessages
-              .slice(0, -1)
-              .slice(-12)
-              .map((m) => ({ role: m.role, content: m.content })),
-          },
-        });
+        return hasRemoteApi ? await remoteApi.askStockAgent(data) : await ask({ data });
       } finally {
         window.clearInterval(id);
       }
@@ -182,7 +182,9 @@ export function AiStockAgent({ selectedSymbol, selectedName, onSelectStock }: Pr
         ...variables.baseMessages,
         {
           role: "assistant",
-          content: `Market data is temporarily unavailable. ${(error as Error).message}`,
+          content:
+            (error as Error).message ||
+            "Chat service is currently unavailable. Please try again later.",
           meta: "Error",
         },
       ]);

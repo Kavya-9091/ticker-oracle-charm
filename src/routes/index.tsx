@@ -6,6 +6,7 @@ import { Area, AreaChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "rec
 import { ArrowDownRight, ArrowUpRight, Loader2, Search } from "lucide-react";
 
 import { getSnapshot, searchTickers } from "@/lib/stocks.functions";
+import { hasRemoteApi, remoteApi } from "@/lib/frontend-api";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { StockList } from "@/components/stock-list";
@@ -73,7 +74,10 @@ function Home() {
 
   const snapshot = useQuery({
     queryKey: ["snapshot", symbol, range],
-    queryFn: () => fetchSnapshot({ data: { symbol, range } }),
+    queryFn: () =>
+      hasRemoteApi
+        ? remoteApi.getSnapshot({ symbol, range })
+        : fetchSnapshot({ data: { symbol, range } }),
     refetchInterval: 60_000,
     refetchOnWindowFocus: false,
     staleTime: 30_000,
@@ -91,7 +95,8 @@ function Home() {
 
   const hits = useQuery({
     queryKey: ["search", debounced],
-    queryFn: () => fetchSearch({ data: { query: debounced } }),
+    queryFn: () =>
+      hasRemoteApi ? remoteApi.searchTickers(debounced) : fetchSearch({ data: { query: debounced } }),
     enabled: debounced.length >= 1 && showHits,
     staleTime: 5 * 60_000,
     gcTime: 10 * 60_000,
