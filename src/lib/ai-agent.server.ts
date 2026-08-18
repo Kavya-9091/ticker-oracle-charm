@@ -129,13 +129,16 @@ function extractProfile(message: string) {
       message,
     );
   const months = horizonMatch && /month/i.test(horizonMatch[2]!) ? Number(horizonMatch[1]) : null;
+  const years = horizonMatch && /year/i.test(horizonMatch[2]!) ? Number(horizonMatch[1]) : null;
   return {
     amount,
     currency,
     horizon,
     beginner,
     wantsWhichStock,
-    shortTerm: wantsWhichStock && (months !== null ? months <= 12 : /short.?term|few months/i.test(message)),
+    shortTerm:
+      wantsWhichStock &&
+      (months !== null ? months <= 12 : years !== null ? years <= 1 : /short.?term|few months/i.test(message)),
   };
 }
 
@@ -407,7 +410,7 @@ Actions: Analyze ${p.snap.symbol} | Compare ${p.snap.symbol} | View chart | View
   return {
     tools: ["get_market_overview", "screen_short_term_stocks", "get_stock_quote", "get_fundamentals", "get_technical_indicators", "get_stock_news"],
     asOf: new Date().toISOString(),
-    markdown: `## 4-Month Research Shortlist
+    markdown: `## ${profile.horizon ? `${profile.horizon.replace(/^\d/, (c) => c.toUpperCase())} Research Shortlist` : "Short-Term Research Shortlist"}
 
 ${profile.beginner ? "Since you're new to investing, I'll keep this simple. A stock is a small ownership piece of a company. If its price rises, your investment value can increase; if it falls, your value can decrease.\n\n" : ""}You gave:
 - Amount: **${profile.amount ? `${currency}${profile.amount.toLocaleString("en-US")}` : "not specified"}**
