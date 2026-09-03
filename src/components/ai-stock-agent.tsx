@@ -32,6 +32,8 @@ type Props = {
   selectedSymbol: string;
   selectedName?: string;
   onSelectStock?: (symbol: string) => void;
+  /** Prompt pushed in from elsewhere in the app (watchlist, portfolio, market overview). */
+  externalPrompt?: { text: string; id: number } | null;
 };
 
 const STORAGE_KEY = "stock-insight-ai-chat";
