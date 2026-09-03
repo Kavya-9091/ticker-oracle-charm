@@ -149,7 +149,11 @@ function Home() {
         </div>
       </header>
 
-      <section className="mt-10">
+      <div className="mt-8">
+        <MarketOverview onAskAi={askAi} />
+      </div>
+
+      <section className="mt-8">
         <div className="relative w-full max-w-2xl">
           <form
             onSubmit={(e) => {
