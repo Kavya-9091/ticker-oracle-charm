@@ -100,7 +100,12 @@ I can help you understand stocks, analyze companies, compare investments, find s
 What would you like to explore?`;
 }
 
-export function AiStockAgent({ selectedSymbol, selectedName, onSelectStock }: Props) {
+export function AiStockAgent({
+  selectedSymbol,
+  selectedName,
+  onSelectStock,
+  externalPrompt,
+}: Props) {
   const [input, setInput] = useState("");
   const [open, setOpen] = useState(false);
   const [minimized, setMinimized] = useState(false);
