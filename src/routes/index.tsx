@@ -69,6 +69,8 @@ function Home() {
   const [symbol, setSymbol] = useState("AAPL");
   const [range, setRange] = useState<Range>("1mo");
   const [showHits, setShowHits] = useState(false);
+  const [aiPrompt, setAiPrompt] = useState<{ text: string; id: number } | null>(null);
+  const askAi = (text: string) => setAiPrompt({ text, id: Date.now() });
 
   const snapshot = useQuery({
     queryKey: ["snapshot", symbol, range],
