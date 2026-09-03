@@ -32,6 +32,8 @@ type Props = {
   selectedSymbol: string;
   selectedName?: string;
   onSelectStock?: (symbol: string) => void;
+  /** Prompt pushed in from elsewhere in the app (watchlist, portfolio, market overview). */
+  externalPrompt?: { text: string; id: number } | null;
 };
 
 const STORAGE_KEY = "stock-insight-ai-chat";
@@ -98,7 +100,12 @@ I can help you understand stocks, analyze companies, compare investments, find s
 What would you like to explore?`;
 }
 
-export function AiStockAgent({ selectedSymbol, selectedName, onSelectStock }: Props) {
+export function AiStockAgent({
+  selectedSymbol,
+  selectedName,
+  onSelectStock,
+  externalPrompt,
+}: Props) {
   const [input, setInput] = useState("");
   const [open, setOpen] = useState(false);
   const [minimized, setMinimized] = useState(false);
@@ -222,6 +229,18 @@ export function AiStockAgent({ selectedSymbol, selectedName, onSelectStock }: Pr
     setInput("");
     mutation.mutate({ message: text, baseMessages: nextMessages });
   };
+
+  const submitRef = useRef(submit);
+  submitRef.current = submit;
+  const lastPromptId = useRef<number | null>(null);
+
+  useEffect(() => {
+    if (!externalPrompt || externalPrompt.id === lastPromptId.current) return;
+    lastPromptId.current = externalPrompt.id;
+    setOpen(true);
+    setMinimized(false);
+    submitRef.current(externalPrompt.text);
+  }, [externalPrompt]);
 
   const beginEdit = (index: number, content: string) => {
     if (mutation.isPending) return;

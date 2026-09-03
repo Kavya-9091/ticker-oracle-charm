@@ -9,6 +9,9 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { StockList } from "@/components/stock-list";
 import { AiStockAgent } from "@/components/ai-stock-agent";
+import { MarketOverview } from "@/components/market-overview";
+import { Watchlist } from "@/components/watchlist";
+import { Portfolio } from "@/components/portfolio";
 
 
 export const Route = createFileRoute("/")({
@@ -66,6 +69,8 @@ function Home() {
   const [symbol, setSymbol] = useState("AAPL");
   const [range, setRange] = useState<Range>("1mo");
   const [showHits, setShowHits] = useState(false);
+  const [aiPrompt, setAiPrompt] = useState<{ text: string; id: number } | null>(null);
+  const askAi = (text: string) => setAiPrompt({ text, id: Date.now() });
 
   const snapshot = useQuery({
     queryKey: ["snapshot", symbol, range],
@@ -144,7 +149,11 @@ function Home() {
         </div>
       </header>
 
-      <section className="mt-10">
+      <div className="mt-8">
+        <MarketOverview onAskAi={askAi} />
+      </div>
+
+      <section className="mt-8">
         <div className="relative w-full max-w-2xl">
           <form
             onSubmit={(e) => {
@@ -414,11 +423,16 @@ function Home() {
         </div>
       )}
     </main>
-    <StockList active={symbol} onSelect={(s) => submit(s)} />
+    <aside className="flex min-w-0 flex-col gap-4">
+      <StockList active={symbol} onSelect={(s) => submit(s)} />
+      <Watchlist activeSymbol={symbol} onSelect={(s) => submit(s)} onAskAi={askAi} />
+      <Portfolio activeSymbol={symbol} onSelect={(s) => submit(s)} onAskAi={askAi} />
+    </aside>
     <AiStockAgent
       selectedSymbol={symbol}
       {...(data?.name ? { selectedName: data.name } : {})}
       onSelectStock={(s) => submit(s)}
+      externalPrompt={aiPrompt}
     />
     </div>
   );

@@ -124,7 +124,7 @@ export function StockList({
   }, [filter]);
 
   return (
-    <aside className="panel-surface flex max-h-[calc(100vh-6rem)] flex-col rounded-xl p-4 md:sticky md:top-6 lg:max-h-[calc(100vh-8rem)]">
+    <section className="panel-surface flex max-h-[26rem] flex-col rounded-xl p-4">
       <h2 className="text-sm font-semibold tracking-wide text-primary uppercase">Stocks</h2>
       <p className="mt-1 text-xs text-muted-foreground">Pick a ticker to load live data</p>
 
