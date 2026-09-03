@@ -230,6 +230,18 @@ export function AiStockAgent({
     mutation.mutate({ message: text, baseMessages: nextMessages });
   };
 
+  const submitRef = useRef(submit);
+  submitRef.current = submit;
+  const lastPromptId = useRef<number | null>(null);
+
+  useEffect(() => {
+    if (!externalPrompt || externalPrompt.id === lastPromptId.current) return;
+    lastPromptId.current = externalPrompt.id;
+    setOpen(true);
+    setMinimized(false);
+    submitRef.current(externalPrompt.text);
+  }, [externalPrompt]);
+
   const beginEdit = (index: number, content: string) => {
     if (mutation.isPending) return;
     setEditingIndex(index);
