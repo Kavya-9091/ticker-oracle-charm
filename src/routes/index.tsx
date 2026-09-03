@@ -419,11 +419,16 @@ function Home() {
         </div>
       )}
     </main>
-    <StockList active={symbol} onSelect={(s) => submit(s)} />
+    <aside className="flex min-w-0 flex-col gap-4">
+      <StockList active={symbol} onSelect={(s) => submit(s)} />
+      <Watchlist activeSymbol={symbol} onSelect={(s) => submit(s)} onAskAi={askAi} />
+      <Portfolio activeSymbol={symbol} onSelect={(s) => submit(s)} onAskAi={askAi} />
+    </aside>
     <AiStockAgent
       selectedSymbol={symbol}
       {...(data?.name ? { selectedName: data.name } : {})}
       onSelectStock={(s) => submit(s)}
+      externalPrompt={aiPrompt}
     />
     </div>
   );
