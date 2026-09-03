@@ -9,6 +9,9 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { StockList } from "@/components/stock-list";
 import { AiStockAgent } from "@/components/ai-stock-agent";
+import { MarketOverview } from "@/components/market-overview";
+import { Watchlist } from "@/components/watchlist";
+import { Portfolio } from "@/components/portfolio";
 
 
 export const Route = createFileRoute("/")({
