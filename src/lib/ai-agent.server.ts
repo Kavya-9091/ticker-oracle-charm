@@ -125,7 +125,7 @@ function extractProfile(message: string) {
         : null;
   const beginner = /don't know|dont know|beginner|new to|explain how|how it work|how does.*work/i.test(message);
   const wantsWhichStock =
-    /which stock|what stock|should i buy|stock.*buy|research.*stock|make profit|profit|shortlist|candidate/i.test(
+    /which stock|what stock|which one|best stock|good for|should i buy|stock.*buy|buy.*stock|research.*stock|make profit|profit|shortlist|candidate/i.test(
       message,
     );
   const months = horizonMatch && /month/i.test(horizonMatch[2]!) ? Number(horizonMatch[1]) : null;
@@ -451,7 +451,7 @@ Ask me for quotes, full stock analysis, comparisons, market summaries, screeners
 }
 
 function answerInvestmentResearch(message: string) {
-  const hasHorizon = /\b(1 year|3 years|5 years|long|short|month|horizon)\b/i.test(message);
+  const hasHorizon = /\b(\d+\s*(?:year|years|yr|yrs|month|months)|long|short|horizon)\b/i.test(message);
   const hasRisk = /\b(low|moderate|medium|high|risk)\b/i.test(message);
   if (!hasHorizon || !hasRisk) {
     return {
