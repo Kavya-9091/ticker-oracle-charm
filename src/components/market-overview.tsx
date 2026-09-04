@@ -1,20 +1,13 @@
 import { useQuery } from "@tanstack/react-query";
 import { Activity, ArrowDownRight, ArrowUpRight, Loader2 } from "lucide-react";
 
-import {
-  hasRemoteApi,
-  isStaticFrontend,
-  missingBackendMessage,
-  remoteApi,
-} from "@/lib/frontend-api";
+import { isStaticFrontend, missingBackendMessage, remoteApi } from "@/lib/frontend-api";
 import { Button } from "@/components/ui/button";
 import { INDEXES } from "@/lib/universe";
 
 async function loadSnapshot(symbol: string) {
-  if (hasRemoteApi) return remoteApi.getSnapshot({ symbol, range: "1d" });
   if (isStaticFrontend) throw new Error(missingBackendMessage());
-  const { getSnapshot } = await import("@/lib/stocks.functions");
-  return getSnapshot({ data: { symbol, range: "1d" } });
+  return remoteApi.getSnapshot({ symbol, range: "1d" });
 }
 
 type Props = { onAskAi?: (prompt: string) => void };

@@ -16,7 +16,10 @@ const configuredApiUrl = import.meta.env["VITE_API_URL"]?.trim();
 const staticFrontend = import.meta.env["VITE_STATIC_FRONTEND"] === "true";
 const REQUEST_TIMEOUT_MS = 20_000;
 
-export const API_URL = configuredApiUrl ? configuredApiUrl.replace(/\/+$/, "") : "";
+const sameOriginApiUrl =
+  !staticFrontend && typeof window !== "undefined" ? window.location.origin : "";
+
+export const API_URL = configuredApiUrl ? configuredApiUrl.replace(/\/+$/, "") : sameOriginApiUrl;
 
 export const hasRemoteApi = Boolean(API_URL);
 export const isStaticFrontend = staticFrontend;

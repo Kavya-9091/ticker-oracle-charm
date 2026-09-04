@@ -18,12 +18,7 @@ import {
   X,
 } from "lucide-react";
 
-import {
-  hasRemoteApi,
-  isStaticFrontend,
-  missingBackendMessage,
-  remoteApi,
-} from "@/lib/frontend-api";
+import { isStaticFrontend, missingBackendMessage, remoteApi } from "@/lib/frontend-api";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 
@@ -225,10 +220,8 @@ export function AiStockAgent({
           .map((m) => ({ role: m.role, content: m.content })),
       };
       try {
-        if (hasRemoteApi) return await remoteApi.askStockAgent(data);
         if (isStaticFrontend) throw new Error(missingBackendMessage());
-        const { askStockAgent } = await import("@/lib/ai-agent.functions");
-        return await askStockAgent({ data });
+        return await remoteApi.askStockAgent(data);
       } finally {
         window.clearInterval(id);
       }

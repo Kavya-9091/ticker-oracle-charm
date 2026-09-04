@@ -3,12 +3,7 @@ import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import { lazy, Suspense, useEffect, useState } from "react";
 import { ArrowDownRight, ArrowUpRight, Loader2, Search } from "lucide-react";
 
-import {
-  hasRemoteApi,
-  isStaticFrontend,
-  missingBackendMessage,
-  remoteApi,
-} from "@/lib/frontend-api";
+import { isStaticFrontend, missingBackendMessage, remoteApi } from "@/lib/frontend-api";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { MarketOverview } from "@/components/market-overview";
@@ -88,10 +83,8 @@ function Home() {
   const snapshot = useQuery({
     queryKey: ["snapshot", symbol, range],
     queryFn: async () => {
-      if (hasRemoteApi) return remoteApi.getSnapshot({ symbol, range });
       if (isStaticFrontend) throw new Error(missingBackendMessage());
-      const { getSnapshot } = await import("@/lib/stocks.functions");
-      return getSnapshot({ data: { symbol, range } });
+      return remoteApi.getSnapshot({ symbol, range });
     },
     refetchInterval: 60_000,
     refetchOnWindowFocus: false,
@@ -110,10 +103,8 @@ function Home() {
   const hits = useQuery({
     queryKey: ["search", debounced],
     queryFn: async () => {
-      if (hasRemoteApi) return remoteApi.searchTickers(debounced);
       if (isStaticFrontend) throw new Error(missingBackendMessage());
-      const { searchTickers } = await import("@/lib/stocks.functions");
-      return searchTickers({ data: { query: debounced } });
+      return remoteApi.searchTickers(debounced);
     },
     enabled: debounced.length >= 1 && showHits,
     staleTime: 5 * 60_000,
