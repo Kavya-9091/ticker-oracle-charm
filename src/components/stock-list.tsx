@@ -162,6 +162,6 @@ export function StockList({
           <li className="px-3 py-6 text-center text-xs text-muted-foreground">No matches</li>
         )}
       </ul>
-    </aside>
+    </section>
   );
 }
