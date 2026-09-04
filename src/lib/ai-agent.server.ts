@@ -645,22 +645,12 @@ export async function runStockAgent(
         : intent === "INVESTMENT_RESEARCH"
         ? answerInvestmentResearch(effectiveMessage)
         : intent === "PORTFOLIO_ANALYSIS"
-          ? {
-              tools: ["analyze_portfolio"],
-              asOf: new Date().toISOString(),
-              markdown: `### Portfolio Analysis
-
-I can help analyze concentration risk, sector exposure, underperforming positions, volatility, diversification, and allocation.
-
-To start, send holdings like this:
-
-| Stock | Quantity | Purchase price |
-|---|---:|---:|
-| AAPL | 5 | 180 |
-| MSFT | 3 | 310 |
-
-I will not buy or sell anything. I will only provide educational analysis and risk observations.`,
-            }
+          ? await (async () => {
+              const holdings = parseHoldings(effectiveMessage);
+              return holdings.length
+                ? await answerPortfolio(holdings)
+                : { tools: ["analyze_portfolio"], asOf: new Date().toISOString(), markdown: PORTFOLIO_INTAKE };
+            })()
           : intent === "QUOTE" && symbols[0]
         ? await answerQuote(symbols[0])
         : intent === "STOCK_COMPARISON" && symbols.length >= 2
