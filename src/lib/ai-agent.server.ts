@@ -418,7 +418,7 @@ ${profile.beginner ? "Since you're new to investing, I'll keep this simple. A st
 - Market: **${market === "IN" ? "India, inferred from INR/Rs" : "US"}**
 - Goal: **potential capital appreciation**
 
-For a 4-month horizon, profit is possible but not predictable. I ranked candidates using momentum, volume, fundamentals, valuation, volatility, and recent news. These are research candidates, not guaranteed-profit picks.
+For a ${profile.horizon ?? "short"} horizon, profit is possible but not predictable. I ranked candidates using momentum, volume, fundamentals, valuation, volatility, and recent news. These are research candidates, not guaranteed-profit picks.
 
 ${rows}
 
@@ -429,7 +429,7 @@ ${rows}
 ${allocation}
 | Cash buffer | ${currency}${Math.round(amount * 0.1).toLocaleString("en-US")} |
 
-This avoids assuming one stock is guaranteed to win. Four months is a short period, and losses are possible.`,
+This avoids assuming one stock is guaranteed to win. A ${profile.horizon ?? "short"} horizon is relatively short for equities, and losses are possible.`,
   };
 }
 
