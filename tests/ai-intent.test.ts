@@ -34,3 +34,12 @@ test("routes indicator definitions to education", () => {
 test("routes future price prompts to education instead of fabricated quotes", () => {
   assert.equal(classifyIntent("What will Nvidia's price be tomorrow?", ["NVDA"]), "EDUCATION");
 });
+
+test("routes explicit stock analysis, comparison, and news intents", () => {
+  assert.equal(classifyIntent("Analyze Apple", ["AAPL"]), "STOCK_ANALYSIS");
+  assert.equal(
+    classifyIntent("Compare Apple with Microsoft", ["AAPL", "MSFT"]),
+    "STOCK_COMPARISON",
+  );
+  assert.equal(classifyIntent("Latest Apple news", ["AAPL"]), "NEWS");
+});

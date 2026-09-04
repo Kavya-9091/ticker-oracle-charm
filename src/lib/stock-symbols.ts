@@ -35,6 +35,8 @@ const tokeniseSymbols = (text: string) => {
 
 function latestComparisonSymbols(history: ChatMessage[]) {
   for (const item of history.slice(-10).reverse()) {
+    const pair = explicitComparisonPair(item.content);
+    if (pair.length >= 2) return pair;
     if (
       !/\b(compare|comparison| vs |versus|which one|lower|higher|more volatile)\b/i.test(
         item.content,
@@ -44,6 +46,24 @@ function latestComparisonSymbols(history: ChatMessage[]) {
     const symbols = tokeniseSymbols(item.content);
     if (symbols.length >= 2) return symbols.slice(0, 2);
   }
+  return [];
+}
+
+function explicitComparisonPair(text: string) {
+  const vsMatch = text.match(/(.+?)\b(?:vs\.?|versus)\b(.+)/i);
+  if (vsMatch) {
+    const left = tokeniseSymbols(vsMatch[1] ?? "");
+    const right = tokeniseSymbols(vsMatch[2] ?? "");
+    if (left[0] && right[0]) return [left[0], right[0]];
+  }
+
+  const compareMatch = text.match(/\bcompare\b(.+?)\b(?:with|to|against)\b(.+)/i);
+  if (compareMatch) {
+    const left = tokeniseSymbols(compareMatch[1] ?? "");
+    const right = tokeniseSymbols(compareMatch[2] ?? "");
+    if (left[0] && right[0]) return [left[0], right[0]];
+  }
+
   return [];
 }
 

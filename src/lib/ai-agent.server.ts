@@ -7,6 +7,7 @@ import {
   horizonStyle,
   type InvestmentContext,
 } from "./investment-context";
+import { filterRelevantNews } from "./news-relevance";
 import type { Snapshot } from "./stocks.server";
 import { resolveStockSymbols, type ChatMessage } from "./stock-symbols";
 import { INDEXES, UNIVERSE } from "./universe";
@@ -77,58 +78,6 @@ async function technical(symbol: string) {
 async function news(symbol: string) {
   const { fetchNews } = await import("./stocks.server");
   return fetchNews(symbol, 5);
-}
-
-function filterRelevantNews(
-  symbol: string,
-  companyName: string,
-  items: Awaited<ReturnType<typeof news>>,
-) {
-  const normalizedSymbol = symbol.toUpperCase();
-  const entityAliases: Record<string, string[]> = {
-    AAPL: ["apple", "aapl", "apple inc", "iphone", "ipad", "mac", "tim cook", "app store"],
-    MSFT: ["microsoft", "msft", "satya nadella", "azure", "windows", "copilot", "xbox"],
-    NVDA: ["nvidia", "nvda", "jensen huang", "geforce", "cuda", "blackwell"],
-    TSLA: ["tesla", "tsla", "elon musk", "model y", "model 3", "cybertruck"],
-    AMZN: ["amazon", "amzn", "aws", "andy jassy", "prime"],
-    GOOGL: ["alphabet", "google", "googl", "sundar pichai", "youtube", "gemini"],
-    META: ["meta", "facebook", "instagram", "whatsapp", "mark zuckerberg"],
-  };
-  const nameTokens = companyName
-    .toLowerCase()
-    .replace(/[^a-z0-9 ]/g, " ")
-    .split(/\s+/)
-    .filter(
-      (token) =>
-        token.length > 3 && !["inc", "corp", "corporation", "limited", "company"].includes(token),
-    );
-  const aliases = new Set([
-    normalizedSymbol.toLowerCase(),
-    ...nameTokens,
-    ...(entityAliases[normalizedSymbol] ?? []),
-  ]);
-  const seen = new Set<string>();
-  return items
-    .map((item) => {
-      const tickers = item.relatedTickers.map((ticker) => ticker.toUpperCase());
-      const text = `${item.title} ${item.summary ?? ""}`.toLowerCase();
-      let score = 0;
-      if (tickers.includes(normalizedSymbol)) score += 5;
-      for (const alias of aliases) {
-        if (text.includes(alias)) score += alias === normalizedSymbol.toLowerCase() ? 4 : 2;
-      }
-      return { item, score };
-    })
-    .filter(({ item, score }) => {
-      const key = item.link || item.title;
-      if (seen.has(key)) return false;
-      seen.add(key);
-      if (score >= 2) return true;
-      const tickers = item.relatedTickers.map((ticker) => ticker.toUpperCase());
-      return tickers.includes(normalizedSymbol);
-    })
-    .sort((a, b) => b.score - a.score || (b.item.publishedAt ?? 0) - (a.item.publishedAt ?? 0))
-    .map(({ item }) => item);
 }
 
 async function answerQuote(symbol: string) {
@@ -216,54 +165,109 @@ The data points to a **${health.toLowerCase()}** research profile with a **${ind
   };
 }
 
+async function answerNews(symbol: string) {
+  const snap = await quote(symbol);
+  const items = filterRelevantNews(snap.symbol, snap.name, await news(symbol));
+  return {
+    tools: ["get_stock_quote", "get_stock_news"],
+    asOf: new Date().toISOString(),
+    markdown: `### Latest ${snap.name} News
+
+${
+  items.length
+    ? items.map((item) => `- [${item.title}](${item.link}) - ${item.publisher}`).join("\n")
+    : "- Stock-specific news is currently unavailable."
+}
+
+Only articles with strong evidence of relevance to **${snap.symbol}** are shown. The app does not substitute generic market or technology news when stock-specific articles are unavailable.`,
+  };
+}
+
 async function answerCompare(symbols: string[]) {
   const rows = await Promise.all(
-    symbols.map(async (s) => ({ snap: await quote(s), ind: await technical(s) })),
+    symbols.slice(0, 2).map(async (s) => ({ snap: await quote(s), ind: await technical(s) })),
   );
-  const header = `| Metric | ${rows.map((r) => r.snap.symbol).join(" | ")} |\n|---|${rows.map(() => "---|").join("")}`;
+  if (rows.length < 2) throw new Error("Comparison requires two verified symbols.");
+  const title = `${rows[0]!.snap.name} vs ${rows[1]!.snap.name}`;
+  const header = `| Metric | ${rows.map((r) => r.snap.symbol).join(" | ")} |\n|---|${rows.map(() => "---:|").join("")}`;
   const row = (label: string, vals: string[]) => `| ${label} | ${vals.join(" | ")} |`;
+  const availableRow = (
+    label: string,
+    values: (number | string | null | undefined)[],
+    formatter: (value: number | string) => string,
+  ) => {
+    if (values.every((value) => value === null || value === undefined || value === "")) return null;
+    return row(
+      label,
+      values.map((value) =>
+        value === null || value === undefined || value === "" ? "unavailable" : formatter(value),
+      ),
+    );
+  };
+  const metricRows = [
+    availableRow(
+      "Price",
+      rows.map((r) => r.snap.price),
+      (value) => `${fmtNum(Number(value))}`,
+    ),
+    availableRow(
+      "Market cap",
+      rows.map((r) => r.snap.financials.marketCap),
+      (value) => fmtBig(Number(value)),
+    ),
+    availableRow(
+      "Revenue growth",
+      rows.map((r) => r.snap.financials.revenueGrowth),
+      (value) => fmtPct(Number(value)),
+    ),
+    availableRow(
+      "Profit margin",
+      rows.map((r) => r.snap.financials.profitMargin),
+      (value) => fmtPct(Number(value)),
+    ),
+    availableRow(
+      "ROE",
+      rows.map((r) => r.snap.financials.returnOnEquity),
+      (value) => fmtPct(Number(value)),
+    ),
+    availableRow(
+      "P/E",
+      rows.map((r) => r.snap.financials.trailingPE),
+      (value) => fmtNum(Number(value)),
+    ),
+    availableRow(
+      "Debt/equity",
+      rows.map((r) => r.snap.financials.debtToEquity),
+      (value) => fmtPct(Number(value), true),
+    ),
+    availableRow(
+      "RSI",
+      rows.map((r) => r.ind.rsi14),
+      (value) => fmtNum(Number(value)),
+    ),
+    availableRow(
+      "1Y momentum",
+      rows.map((r) => r.ind.momentum.pct1y),
+      (value) => fmtPct(Number(value), true),
+    ),
+    availableRow(
+      "Volatility",
+      rows.map((r) => r.ind.annualisedVolatilityPct),
+      (value) => fmtPct(Number(value), true),
+    ),
+    availableRow(
+      "Technical trend",
+      rows.map((r) => r.ind.trend),
+      (value) => String(value),
+    ),
+  ].filter(Boolean);
   return {
     tools: ["compare_stocks", "get_stock_quote", "get_fundamentals", "get_technical_indicators"],
     asOf: new Date().toISOString(),
-    markdown: `### Stock Comparison
+    markdown: `## ${title}
 
 ${header}
-${row(
-  "Price",
-  rows.map((r) => `${fmtNum(r.snap.price)} ${r.snap.currency}`),
-)}
-${row(
-  "Market cap",
-  rows.map((r) => fmtBig(r.snap.financials.marketCap)),
-)}
-${row(
-  "Revenue growth",
-  rows.map((r) => fmtPct(r.snap.financials.revenueGrowth)),
-)}
-${row(
-  "P/E",
-  rows.map((r) => fmtNum(r.snap.financials.trailingPE)),
-)}
-${row(
-  "ROE",
-  rows.map((r) => fmtPct(r.snap.financials.returnOnEquity)),
-)}
-${row(
-  "Debt/equity",
-  rows.map((r) => fmtPct(r.snap.financials.debtToEquity, true)),
-)}
-${row(
-  "Free cash flow",
-  rows.map((r) => fmtBig(r.snap.financials.freeCashflow)),
-)}
-${row(
-  "1Y momentum",
-  rows.map((r) => fmtPct(r.ind.momentum.pct1y, true)),
-)}
-${row(
-  "Technical trend",
-  rows.map((r) => r.ind.trend),
-)}
+${metricRows.join("\n")}
 
 The stronger candidate depends on the investor's objective: growth investors may prioritize revenue growth and momentum, while quality or income-oriented investors should care more about profitability, balance-sheet risk, valuation, and dividend history. This is research, not a buy or sell instruction.
 `,
@@ -1021,15 +1025,17 @@ export async function runStockAgent(
                 ? await answerQuote(symbols[0])
                 : intent === "STOCK_COMPARISON" && symbols.length >= 2
                   ? await answerCompare(symbols)
-                  : intent === "MARKET_OVERVIEW"
-                    ? await answerMarketOverview()
-                    : intent === "STOCK_SCREENING"
-                      ? await answerScreening(message)
-                      : intent === "EDUCATION"
-                        ? answerEducation(message)
-                        : symbols[0]
-                          ? await answerAnalysis(symbols[0])
-                          : answerEducation(message);
+                  : intent === "NEWS" && symbols[0]
+                    ? await answerNews(symbols[0])
+                    : intent === "MARKET_OVERVIEW"
+                      ? await answerMarketOverview()
+                      : intent === "STOCK_SCREENING"
+                        ? await answerScreening(message)
+                        : intent === "EDUCATION"
+                          ? answerEducation(message)
+                          : symbols[0]
+                            ? await answerAnalysis(symbols[0])
+                            : answerEducation(message);
 
     return {
       intent,

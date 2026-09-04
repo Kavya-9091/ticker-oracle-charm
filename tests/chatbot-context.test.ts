@@ -55,3 +55,34 @@ test("keeps two-symbol context for relative comparison", () => {
 test("maps common company names to tickers", () => {
   assert.deepEqual(resolveStockSymbols("Tell me about Tesla.", []), ["TSLA"]);
 });
+
+test("keeps Apple and Microsoft for real comparison follow-ups", () => {
+  const userHistory = [
+    { role: "user" as const, content: "Analyze Apple" },
+    { role: "assistant" as const, content: "## AAPL Analysis" },
+    { role: "user" as const, content: "Compare it with Microsoft" },
+    { role: "assistant" as const, content: "## Apple Inc. vs Microsoft Corporation" },
+  ];
+
+  assert.deepEqual(resolveStockSymbols("Which one has lower P/E?", userHistory), ["AAPL", "MSFT"]);
+  assert.deepEqual(resolveStockSymbols("Which one has higher profit margin?", userHistory), [
+    "AAPL",
+    "MSFT",
+  ]);
+});
+
+test("replaces current comparison pair when the first stock is compared with Nvidia", () => {
+  const userHistory = [
+    { role: "user" as const, content: "Analyze Apple" },
+    { role: "assistant" as const, content: "## AAPL Analysis" },
+    { role: "user" as const, content: "Compare it with Microsoft" },
+    { role: "assistant" as const, content: "## Apple Inc. vs Microsoft Corporation" },
+    { role: "user" as const, content: "Compare the first one with Nvidia" },
+    { role: "assistant" as const, content: "## Apple Inc. vs NVIDIA Corporation" },
+  ];
+
+  assert.deepEqual(resolveStockSymbols("Which one has higher revenue growth?", userHistory), [
+    "AAPL",
+    "NVDA",
+  ]);
+});
