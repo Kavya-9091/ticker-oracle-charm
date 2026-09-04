@@ -2,7 +2,7 @@ import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 
 export const getSnapshot = createServerFn({ method: "GET" })
-  .inputValidator((data: unknown) =>
+  .validator((data: unknown) =>
     z
       .object({
         symbol: z.string().min(1).max(20),
@@ -16,7 +16,7 @@ export const getSnapshot = createServerFn({ method: "GET" })
   });
 
 export const searchTickers = createServerFn({ method: "GET" })
-  .inputValidator((data: unknown) => z.object({ query: z.string().max(60) }).parse(data))
+  .validator((data: unknown) => z.object({ query: z.string().max(60) }).parse(data))
   .handler(async ({ data }) => {
     const { searchSymbols } = await import("./stocks.server");
     return searchSymbols(data.query);

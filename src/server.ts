@@ -3,6 +3,13 @@ import "./lib/error-capture";
 import { consumeLastCapturedError } from "./lib/error-capture";
 import { renderErrorPage } from "./lib/error-page";
 
+const CHAT_MESSAGE_MAX = 1200;
+const HISTORY_MESSAGE_MAX = 5000;
+const SEARCH_QUERY_MAX = 60;
+const SYMBOL_MAX = 20;
+const SYMBOL_PATTERN = /^\^?[A-Z0-9][A-Z0-9.-]{0,19}$/i;
+const RANGES = new Set(["1d", "5d", "1mo", "1y", "5y"]);
+
 const ALLOWED_ORIGINS = new Set([
   "https://kavya-9091.github.io",
   "https://ticker-oracle-charm.lovable.app",
@@ -53,7 +60,10 @@ function isH3SwallowedErrorBody(body: string): boolean {
 
 function corsHeaders(request: Request) {
   const origin = request.headers.get("origin") ?? "";
-  const allowOrigin = ALLOWED_ORIGINS.has(origin) ? origin : "https://kavya-9091.github.io";
+  const allowOrigin =
+    ALLOWED_ORIGINS.has(origin) || /^http:\/\/(?:localhost|127\.0\.0\.1):\d+$/.test(origin)
+      ? origin
+      : "https://kavya-9091.github.io";
   return {
     "access-control-allow-origin": allowOrigin,
     "access-control-allow-methods": "GET, POST, OPTIONS",
@@ -73,6 +83,24 @@ function jsonResponse(request: Request, data: unknown, init?: ResponseInit) {
   });
 }
 
+async function parseJsonBody(request: Request): Promise<unknown> {
+  try {
+    return await request.json();
+  } catch {
+    return null;
+  }
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return value !== null && typeof value === "object" && !Array.isArray(value);
+}
+
+function serviceUnavailable(error: unknown) {
+  return /market data|provider|rate-limit|timeout|temporarily unavailable|unavailable/i.test(
+    String((error as Error)?.message ?? ""),
+  );
+}
+
 async function handleApiRequest(request: Request): Promise<Response | null> {
   const url = new URL(request.url);
   if (!url.pathname.startsWith("/api/")) return null;
@@ -83,54 +111,110 @@ async function handleApiRequest(request: Request): Promise<Response | null> {
 
   try {
     if (url.pathname === "/api/chat" && request.method === "POST") {
-      const body = (await request.json()) as {
-        message?: unknown;
-        selectedSymbol?: unknown;
-        history?: unknown;
-      };
-      if (typeof body.message !== "string" || !body.message.trim()) {
+      const body = await parseJsonBody(request);
+      if (!isRecord(body)) {
+        return jsonResponse(
+          request,
+          { error: "Request body must be valid JSON." },
+          { status: 400 },
+        );
+      }
+      const message = body["message"];
+      const selectedSymbolInput = body["selectedSymbol"];
+      const historyInput = body["history"];
+      if (typeof message !== "string" || !message.trim()) {
         return jsonResponse(request, { error: "Message is required." }, { status: 400 });
       }
+      if (message.length > CHAT_MESSAGE_MAX) {
+        return jsonResponse(
+          request,
+          { error: `Message must be ${CHAT_MESSAGE_MAX} characters or fewer.` },
+          { status: 400 },
+        );
+      }
+      if (
+        selectedSymbolInput !== undefined &&
+        (typeof selectedSymbolInput !== "string" ||
+          !selectedSymbolInput.trim() ||
+          selectedSymbolInput.length > SYMBOL_MAX)
+      ) {
+        return jsonResponse(request, { error: "Selected symbol is invalid." }, { status: 400 });
+      }
       const { runStockAgent } = await import("./lib/ai-agent.server");
-      const history = Array.isArray(body.history)
-        ? body.history
+      const history = Array.isArray(historyInput)
+        ? historyInput
             .filter(
               (item) =>
                 item &&
                 typeof item === "object" &&
                 ("role" in item ? item.role === "user" || item.role === "assistant" : false) &&
                 "content" in item &&
-                typeof item.content === "string",
+                typeof item.content === "string" &&
+                item.content.length <= HISTORY_MESSAGE_MAX,
             )
             .slice(-12)
         : [];
       const selectedSymbol =
-        typeof body.selectedSymbol === "string" ? body.selectedSymbol : undefined;
-      return jsonResponse(
-        request,
-        await runStockAgent(body.message, history, selectedSymbol),
-      );
+        typeof selectedSymbolInput === "string" ? selectedSymbolInput : undefined;
+      return jsonResponse(request, await runStockAgent(message, history, selectedSymbol));
     }
 
     if (url.pathname === "/api/snapshot" && request.method === "POST") {
-      const body = (await request.json()) as { symbol?: unknown; range?: unknown };
-      if (typeof body.symbol !== "string" || !body.symbol.trim()) {
+      const body = await parseJsonBody(request);
+      if (!isRecord(body)) {
+        return jsonResponse(
+          request,
+          { error: "Request body must be valid JSON." },
+          { status: 400 },
+        );
+      }
+      const symbol = body["symbol"];
+      const range = body["range"];
+      if (typeof symbol !== "string" || !symbol.trim()) {
         return jsonResponse(request, { error: "Symbol is required." }, { status: 400 });
+      }
+      if (symbol.length > SYMBOL_MAX) {
+        return jsonResponse(
+          request,
+          { error: `Symbol must be ${SYMBOL_MAX} characters or fewer.` },
+          { status: 400 },
+        );
+      }
+      if (!SYMBOL_PATTERN.test(symbol.trim())) {
+        return jsonResponse(request, { error: "Symbol format is invalid." }, { status: 400 });
+      }
+      if (range !== undefined && (typeof range !== "string" || !RANGES.has(range))) {
+        return jsonResponse(request, { error: "Range is invalid." }, { status: 400 });
       }
       const { fetchSnapshot } = await import("./lib/stocks.server");
       return jsonResponse(
         request,
-        await fetchSnapshot(body.symbol, typeof body.range === "string" ? body.range : "1mo"),
+        await fetchSnapshot(symbol, typeof range === "string" ? range : "1mo"),
       );
     }
 
     if (url.pathname === "/api/search" && request.method === "POST") {
-      const body = (await request.json()) as { query?: unknown };
+      const body = await parseJsonBody(request);
+      if (!isRecord(body)) {
+        return jsonResponse(
+          request,
+          { error: "Request body must be valid JSON." },
+          { status: 400 },
+        );
+      }
+      const query = body["query"];
+      if (query !== undefined && typeof query !== "string") {
+        return jsonResponse(request, { error: "Search query is invalid." }, { status: 400 });
+      }
+      if (typeof query === "string" && query.length > SEARCH_QUERY_MAX) {
+        return jsonResponse(
+          request,
+          { error: `Search query must be ${SEARCH_QUERY_MAX} characters or fewer.` },
+          { status: 400 },
+        );
+      }
       const { searchSymbols } = await import("./lib/stocks.server");
-      return jsonResponse(
-        request,
-        await searchSymbols(typeof body.query === "string" ? body.query : ""),
-      );
+      return jsonResponse(request, await searchSymbols(typeof query === "string" ? query : ""));
     }
 
     return jsonResponse(request, { error: "API route not found." }, { status: 404 });
@@ -139,11 +223,9 @@ async function handleApiRequest(request: Request): Promise<Response | null> {
     return jsonResponse(
       request,
       {
-        error:
-          (error as Error).message ||
-          "Chat service is currently unavailable. Please try again later.",
+        error: "Service is temporarily unavailable. Please try again later.",
       },
-      { status: 500 },
+      { status: serviceUnavailable(error) ? 503 : 500 },
     );
   }
 }

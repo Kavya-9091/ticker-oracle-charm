@@ -40,7 +40,13 @@ export function Watchlist({ activeSymbol, onSelect, onAskAi }: Props) {
         <h2 className="flex items-center gap-2 text-xs font-semibold tracking-wide text-primary uppercase">
           <Star className="size-4" /> Watchlist
         </h2>
-        <Button type="button" size="sm" variant="secondary" className="h-7 gap-1 text-xs" onClick={add}>
+        <Button
+          type="button"
+          size="sm"
+          variant="secondary"
+          className="h-7 gap-1 text-xs"
+          onClick={add}
+        >
           <Plus className="size-3" /> {activeSymbol}
         </Button>
       </div>

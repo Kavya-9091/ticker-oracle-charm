@@ -82,9 +82,7 @@ export function atr(bars: Bar[], period = 14): number | null {
   for (let i = 1; i < usable.length; i++) {
     const cur = usable[i]!;
     const prev = usable[i - 1]!;
-    trs.push(
-      Math.max(cur.h! - cur.l!, Math.abs(cur.h! - prev.c), Math.abs(cur.l! - prev.c)),
-    );
+    trs.push(Math.max(cur.h! - cur.l!, Math.abs(cur.h! - prev.c), Math.abs(cur.l! - prev.c)));
   }
   return round(trs.slice(-period).reduce((a, b) => a + b, 0) / period);
 }
@@ -167,7 +165,13 @@ export function computeIndicators(bars: Bar[]) {
       averageVolume: avgVol === null ? null : Math.round(avgVol),
       recent5dAverage: recentVol === null ? null : Math.round(recentVol),
       volumeTrend:
-        avgVol && recentVol ? (recentVol > avgVol * 1.15 ? "rising" : recentVol < avgVol * 0.85 ? "falling" : "steady") : null,
+        avgVol && recentVol
+          ? recentVol > avgVol * 1.15
+            ? "rising"
+            : recentVol < avgVol * 0.85
+              ? "falling"
+              : "steady"
+          : null,
     },
   };
 }

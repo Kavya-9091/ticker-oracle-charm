@@ -30,7 +30,8 @@ function apiErrorMessage(status: number, fallback?: string) {
 
   if (status === 400) return "The request was not valid. Please check your input and try again.";
   if (status === 401) return "Chat service is not authorized. Check the backend configuration.";
-  if (status === 403) return "Chat service blocked this request. Check backend CORS and permissions.";
+  if (status === 403)
+    return "Chat service blocked this request. Check backend CORS and permissions.";
   if (status === 404) {
     return `Backend API was not found at ${API_URL}. Deploy the latest backend code or update VITE_API_URL.`;
   }

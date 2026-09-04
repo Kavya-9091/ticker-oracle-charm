@@ -1,6 +1,6 @@
 # Stock Insight
 
-can u build app for me that gives me  the stock price and related to financial information about a company when i enter a stock symbol . i dont want to have to give u anything external like an api key  and i dont want you to use mock data make the data accurate.
+can u build app for me that gives me the stock price and related to financial information about a company when i enter a stock symbol . i dont want to have to give u anything external like an api key and i dont want you to use mock data make the data accurate.
 
 This project was built with [Lovable](https://lovable.dev).
 

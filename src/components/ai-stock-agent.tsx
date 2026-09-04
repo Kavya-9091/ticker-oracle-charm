@@ -18,7 +18,12 @@ import {
   X,
 } from "lucide-react";
 
-import { hasRemoteApi, isStaticFrontend, missingBackendMessage, remoteApi } from "@/lib/frontend-api";
+import {
+  hasRemoteApi,
+  isStaticFrontend,
+  missingBackendMessage,
+  remoteApi,
+} from "@/lib/frontend-api";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 
@@ -27,12 +32,25 @@ type AskVariables = { message: string; baseMessages: Message[] };
 type SuggestionItem = readonly [label: string, value: string];
 
 type RecentConversation = { title: string; messages: Message[] };
+type SpeechRecognitionConstructor = new () => {
+  lang: string;
+  onresult: (event: SpeechRecognitionResultEventLike) => void;
+  start: () => void;
+};
+type SpeechRecognitionResultEventLike = {
+  results?: ArrayLike<ArrayLike<{ transcript?: string }>>;
+};
+
+type BrowserWithSpeechRecognition = Window &
+  typeof globalThis & {
+    SpeechRecognition?: SpeechRecognitionConstructor;
+    webkitSpeechRecognition?: SpeechRecognitionConstructor;
+  };
 
 type Props = {
   selectedSymbol: string;
   selectedName?: string;
   onSelectStock?: (symbol: string) => void;
-  /** Prompt pushed in from elsewhere in the app (watchlist, portfolio, market overview). */
   externalPrompt?: { text: string; id: number } | null;
 };
 
@@ -58,7 +76,10 @@ const rotatingPlaceholders = [
 
 const quickSuggestions: readonly SuggestionItem[] = [
   ["Analyze a stock", "Analyze AAPL"],
-  ["Find stocks", "Find profitable technology companies with revenue growth above 15% and low debt"],
+  [
+    "Find stocks",
+    "Find profitable technology companies with revenue growth above 15% and low debt",
+  ],
   ["Compare stocks", "Compare AAPL vs MSFT"],
   ["Market news", "What happened in the market today?"],
   ["Market overview", "Give me today's market summary"],
@@ -100,6 +121,52 @@ I can help you understand stocks, analyze companies, compare investments, find s
 What would you like to explore?`;
 }
 
+function fallbackMessages(): Message[] {
+  return [{ role: "assistant", content: initialMessage(), meta: "Online" }];
+}
+
+function parseStoredMessages(value: string | null): Message[] {
+  if (!value) return fallbackMessages();
+  try {
+    const parsed = JSON.parse(value);
+    if (!Array.isArray(parsed)) return fallbackMessages();
+    const messages = parsed.filter(
+      (item): item is Message =>
+        item &&
+        typeof item === "object" &&
+        (item.role === "user" || item.role === "assistant") &&
+        typeof item.content === "string" &&
+        (item.meta === undefined || typeof item.meta === "string"),
+    );
+    return messages.length ? messages : fallbackMessages();
+  } catch {
+    return fallbackMessages();
+  }
+}
+
+function parseStoredRecents(value: string | null): RecentConversation[] {
+  if (!value) return [];
+  try {
+    const parsed = JSON.parse(value);
+    if (!Array.isArray(parsed)) return [];
+    return parsed
+      .filter(
+        (item): item is RecentConversation =>
+          item &&
+          typeof item === "object" &&
+          typeof item.title === "string" &&
+          Array.isArray(item.messages),
+      )
+      .map((item) => ({
+        title: item.title,
+        messages: parseStoredMessages(JSON.stringify(item.messages)),
+      }))
+      .slice(0, 5);
+  } catch {
+    return [];
+  }
+}
+
 export function AiStockAgent({
   selectedSymbol,
   selectedName,
@@ -110,28 +177,26 @@ export function AiStockAgent({
   const [open, setOpen] = useState(false);
   const [minimized, setMinimized] = useState(false);
   const [placeholderIndex, setPlaceholderIndex] = useState(0);
-  const [recents, setRecents] = useState<RecentConversation[]>([]);
-  const [messages, setMessages] = useState<Message[]>([]);
+  const [recents, setRecents] = useState<RecentConversation[]>(() =>
+    typeof window === "undefined"
+      ? []
+      : parseStoredRecents(window.localStorage.getItem(RECENTS_KEY)),
+  );
+  const [messages, setMessages] = useState<Message[]>(() =>
+    typeof window === "undefined"
+      ? fallbackMessages()
+      : parseStoredMessages(window.localStorage.getItem(STORAGE_KEY)),
+  );
   const [loadingIndex, setLoadingIndex] = useState(0);
   const [editingIndex, setEditingIndex] = useState<number | null>(null);
   const [editingText, setEditingText] = useState("");
   const scrollRef = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    const stored = window.localStorage.getItem(STORAGE_KEY);
-    setMessages(
-      stored
-        ? JSON.parse(stored)
-        : [{ role: "assistant", content: initialMessage(), meta: "Online" }],
-    );
-    setRecents(JSON.parse(window.localStorage.getItem(RECENTS_KEY) ?? "[]"));
-    window.localStorage.setItem(PREF_KEY, JSON.stringify({ selectedStock: selectedSymbol }));
-  }, []);
+  const scrollKey = mutationSafeScrollKey(messages);
 
   useEffect(() => {
     if (messages.length) window.localStorage.setItem(STORAGE_KEY, JSON.stringify(messages));
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: "smooth" });
-  }, [messages, mutationSafeScrollKey(messages)]);
+  }, [messages, scrollKey]);
 
   useEffect(() => {
     window.localStorage.setItem(PREF_KEY, JSON.stringify({ selectedStock: selectedSymbol }));
@@ -147,7 +212,10 @@ export function AiStockAgent({
 
   const mutation = useMutation({
     mutationFn: async ({ message, baseMessages }: AskVariables) => {
-      const id = window.setInterval(() => setLoadingIndex((v) => (v + 1) % loadingLines.length), 900);
+      const id = window.setInterval(
+        () => setLoadingIndex((v) => (v + 1) % loadingLines.length),
+        900,
+      );
       const data = {
         message,
         selectedSymbol,
@@ -268,18 +336,19 @@ export function AiStockAgent({
   };
 
   const clearChat = () => {
-    const next = [{ role: "assistant" as const, content: initialMessage(), meta: "Online" }];
+    const next = fallbackMessages();
     setMessages(next);
     window.localStorage.setItem(STORAGE_KEY, JSON.stringify(next));
   };
 
   const startVoice = () => {
+    const browserWindow = window as BrowserWithSpeechRecognition;
     const SpeechRecognition =
-      (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+      browserWindow.SpeechRecognition || browserWindow.webkitSpeechRecognition;
     if (!SpeechRecognition) return;
     const recognition = new SpeechRecognition();
     recognition.lang = "en-US";
-    recognition.onresult = (event: any) => {
+    recognition.onresult = (event) => {
       const text = event.results?.[0]?.[0]?.transcript;
       if (text) submit(text);
     };
@@ -288,7 +357,10 @@ export function AiStockAgent({
 
   const supportsVoice =
     typeof window !== "undefined" &&
-    Boolean((window as any).SpeechRecognition || (window as any).webkitSpeechRecognition);
+    Boolean(
+      (window as BrowserWithSpeechRecognition).SpeechRecognition ||
+      (window as BrowserWithSpeechRecognition).webkitSpeechRecognition,
+    );
 
   return (
     <>
@@ -311,13 +383,34 @@ export function AiStockAgent({
                 </div>
               </div>
               <div className="flex shrink-0 gap-1">
-                <Button type="button" variant="ghost" size="icon" className="size-8" onClick={() => setMinimized(true)} aria-label="Minimize chat">
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  className="size-8"
+                  onClick={() => setMinimized(true)}
+                  aria-label="Minimize chat"
+                >
                   <Minimize2 className="size-4" />
                 </Button>
-                <Button type="button" variant="ghost" size="icon" className="size-8" onClick={clearChat} aria-label="Clear chat">
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  className="size-8"
+                  onClick={clearChat}
+                  aria-label="Clear chat"
+                >
                   <Eraser className="size-4" />
                 </Button>
-                <Button type="button" variant="ghost" size="icon" className="size-8" onClick={() => setOpen(false)} aria-label="Close chat">
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  className="size-8"
+                  onClick={() => setOpen(false)}
+                  aria-label="Close chat"
+                >
                   <X className="size-4" />
                 </Button>
               </div>
@@ -328,14 +421,24 @@ export function AiStockAgent({
             <section className="rounded-lg border border-border bg-primary/5 p-3">
               <div className="flex items-center justify-between gap-3">
                 <div>
-                  <p className="text-xs tracking-wide text-muted-foreground uppercase">Current context</p>
+                  <p className="text-xs tracking-wide text-muted-foreground uppercase">
+                    Current context
+                  </p>
                   <p className="tabular text-sm font-semibold">{selectedSymbol}</p>
                 </div>
-                <Button type="button" size="sm" variant="secondary" onClick={() => onSelectStock?.(selectedSymbol)} className="h-8 rounded-lg text-xs">
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="secondary"
+                  onClick={() => onSelectStock?.(selectedSymbol)}
+                  className="h-8 rounded-lg text-xs"
+                >
                   View Stock
                 </Button>
               </div>
-              {selectedName && <p className="mt-1 truncate text-xs text-muted-foreground">{selectedName}</p>}
+              {selectedName && (
+                <p className="mt-1 truncate text-xs text-muted-foreground">{selectedName}</p>
+              )}
             </section>
 
             {recents.length > 0 && (
@@ -358,18 +461,25 @@ export function AiStockAgent({
 
             <SuggestionGroup title="For this stock" items={contextSuggestions} onPick={submit} />
             <SuggestionGroup title="Quick actions" items={quickSuggestions} onPick={submit} />
-            <SuggestionGroup title="Investment research" items={investmentSuggestions} onPick={submit} />
+            <SuggestionGroup
+              title="Investment research"
+              items={investmentSuggestions}
+              onPick={submit}
+            />
             <SuggestionGroup title="Learn" items={learnSuggestions} onPick={submit} />
 
             {messages.map((message, index) => (
-              <article key={index} className={`flex gap-2 ${message.role === "user" ? "justify-end" : ""}`}>
+              <article
+                key={index}
+                className={`flex gap-2 ${message.role === "user" ? "justify-end" : ""}`}
+              >
                 {message.role === "assistant" && (
                   <div className="mt-1 flex size-7 shrink-0 items-center justify-center rounded-lg bg-primary/15 text-primary">
                     <Bot className="size-3.5" />
                   </div>
                 )}
                 <div
-                  className={`max-w-[85%] rounded-lg border px-3 py-2 ${
+                  className={`min-w-0 max-w-[88%] rounded-lg border px-3 py-2 ${
                     message.role === "user"
                       ? "border-primary/30 bg-primary/15"
                       : "border-border bg-card/70"
@@ -390,18 +500,52 @@ export function AiStockAgent({
                         }}
                       />
                       <div className="flex justify-end gap-2">
-                        <Button type="button" size="sm" variant="ghost" className="h-7 px-2 text-xs" onClick={cancelEdit}>
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="ghost"
+                          className="h-7 px-2 text-xs"
+                          onClick={cancelEdit}
+                        >
                           Cancel
                         </Button>
-                        <Button type="button" size="sm" className="h-7 px-2 text-xs" onClick={saveEdit}>
+                        <Button
+                          type="button"
+                          size="sm"
+                          className="h-7 px-2 text-xs"
+                          onClick={saveEdit}
+                        >
                           Save
                         </Button>
                       </div>
                     </div>
                   ) : (
                     <>
-                      <div className="prose prose-invert max-w-none text-xs prose-headings:mb-2 prose-headings:mt-0 prose-headings:text-foreground prose-a:text-primary prose-table:text-[11px]">
-                        <ReactMarkdown remarkPlugins={[remarkGfm]}>{message.content}</ReactMarkdown>
+                      <div className="prose prose-invert max-w-none overflow-hidden text-xs prose-headings:mb-2 prose-headings:mt-0 prose-headings:text-foreground prose-a:text-primary prose-p:leading-relaxed prose-table:my-2 prose-table:text-[11px]">
+                        <ReactMarkdown
+                          remarkPlugins={[remarkGfm]}
+                          components={{
+                            table: ({ children }) => (
+                              <div className="my-2 max-w-full overflow-x-auto rounded-lg border border-border">
+                                <table className="w-full min-w-[520px] table-auto border-collapse text-left">
+                                  {children}
+                                </table>
+                              </div>
+                            ),
+                            th: ({ children }) => (
+                              <th className="border-b border-border px-3 py-2 align-bottom text-[11px] leading-tight whitespace-nowrap">
+                                {children}
+                              </th>
+                            ),
+                            td: ({ children }) => (
+                              <td className="border-b border-border/70 px-3 py-2 align-top text-[11px] leading-tight whitespace-nowrap">
+                                {children}
+                              </td>
+                            ),
+                          }}
+                        >
+                          {message.content}
+                        </ReactMarkdown>
                       </div>
                       {message.role === "user" && (
                         <button
@@ -459,7 +603,14 @@ export function AiStockAgent({
           >
             <div className="flex items-end gap-2 rounded-lg border border-border bg-background/70 p-2">
               {supportsVoice && (
-                <Button type="button" variant="ghost" size="icon" onClick={startVoice} className="size-9 shrink-0" aria-label="Voice input">
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  onClick={startVoice}
+                  className="size-9 shrink-0"
+                  aria-label="Voice input"
+                >
                   <Mic className="size-4" />
                 </Button>
               )}
@@ -475,7 +626,12 @@ export function AiStockAgent({
                   }
                 }}
               />
-              <Button type="submit" disabled={!canSend} className="size-9 shrink-0 rounded-lg p-0" aria-label="Send">
+              <Button
+                type="submit"
+                disabled={!canSend}
+                className="size-9 shrink-0 rounded-lg p-0"
+                aria-label="Send"
+              >
                 <Send className="size-4" />
               </Button>
             </div>

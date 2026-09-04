@@ -10,6 +10,13 @@ export type UniverseEntry = {
   market: Market;
 };
 
+export type IndexEntry = {
+  symbol: string;
+  label: string;
+  provider: "yahoo";
+  notes: string;
+};
+
 export const UNIVERSE: UniverseEntry[] = [
   // --- United States -------------------------------------------------------
   { symbol: "AAPL", name: "Apple Inc.", sector: "Technology", market: "US" },
@@ -32,7 +39,12 @@ export const UNIVERSE: UniverseEntry[] = [
   { symbol: "GOOGL", name: "Alphabet Inc.", sector: "Communication Services", market: "US" },
   { symbol: "META", name: "Meta Platforms", sector: "Communication Services", market: "US" },
   { symbol: "NFLX", name: "Netflix, Inc.", sector: "Communication Services", market: "US" },
-  { symbol: "DIS", name: "The Walt Disney Company", sector: "Communication Services", market: "US" },
+  {
+    symbol: "DIS",
+    name: "The Walt Disney Company",
+    sector: "Communication Services",
+    market: "US",
+  },
   { symbol: "AMZN", name: "Amazon.com, Inc.", sector: "Consumer Discretionary", market: "US" },
   { symbol: "TSLA", name: "Tesla, Inc.", sector: "Consumer Discretionary", market: "US" },
   { symbol: "HD", name: "The Home Depot", sector: "Consumer Discretionary", market: "US" },
@@ -84,7 +96,12 @@ export const UNIVERSE: UniverseEntry[] = [
   { symbol: "ITC.NS", name: "ITC Limited", sector: "Consumer Staples", market: "IN" },
   { symbol: "HINDUNILVR.NS", name: "Hindustan Unilever", sector: "Consumer Staples", market: "IN" },
   { symbol: "NESTLEIND.NS", name: "Nestle India", sector: "Consumer Staples", market: "IN" },
-  { symbol: "MARUTI.NS", name: "Maruti Suzuki India", sector: "Consumer Discretionary", market: "IN" },
+  {
+    symbol: "MARUTI.NS",
+    name: "Maruti Suzuki India",
+    sector: "Consumer Discretionary",
+    market: "IN",
+  },
   { symbol: "TATAMOTORS.NS", name: "Tata Motors", sector: "Consumer Discretionary", market: "IN" },
   { symbol: "TITAN.NS", name: "Titan Company", sector: "Consumer Discretionary", market: "IN" },
   { symbol: "ASIANPAINT.NS", name: "Asian Paints", sector: "Materials", market: "IN" },
@@ -97,27 +114,52 @@ export const UNIVERSE: UniverseEntry[] = [
   { symbol: "ONGC.NS", name: "Oil & Natural Gas Corp", sector: "Energy", market: "IN" },
   { symbol: "NTPC.NS", name: "NTPC Limited", sector: "Utilities", market: "IN" },
   { symbol: "POWERGRID.NS", name: "Power Grid Corporation", sector: "Utilities", market: "IN" },
-  { symbol: "BHARTIARTL.NS", name: "Bharti Airtel", sector: "Communication Services", market: "IN" },
+  {
+    symbol: "BHARTIARTL.NS",
+    name: "Bharti Airtel",
+    sector: "Communication Services",
+    market: "IN",
+  },
 ];
 
-export const INDEXES: Record<Market | "GLOBAL", { symbol: string; label: string }[]> = {
+export const INDEXES: Record<Market | "GLOBAL", IndexEntry[]> = {
   US: [
-    { symbol: "^GSPC", label: "S&P 500" },
-    { symbol: "^IXIC", label: "NASDAQ Composite" },
-    { symbol: "^DJI", label: "Dow Jones" },
-    { symbol: "^VIX", label: "VIX" },
+    { symbol: "^GSPC", label: "S&P 500", provider: "yahoo", notes: "Yahoo symbol for S&P 500" },
+    {
+      symbol: "^IXIC",
+      label: "NASDAQ Composite",
+      provider: "yahoo",
+      notes: "Yahoo symbol for Nasdaq Composite",
+    },
+    { symbol: "^DJI", label: "Dow Jones", provider: "yahoo", notes: "Yahoo symbol for DJIA" },
+    { symbol: "^VIX", label: "VIX", provider: "yahoo", notes: "Yahoo symbol for CBOE VIX" },
   ],
   IN: [
-    { symbol: "^NSEI", label: "NIFTY 50" },
-    { symbol: "^BSESN", label: "SENSEX" },
-    { symbol: "^NSEBANK", label: "BANK NIFTY" },
+    { symbol: "^NSEI", label: "NIFTY 50", provider: "yahoo", notes: "Yahoo symbol for NIFTY 50" },
+    { symbol: "^BSESN", label: "SENSEX", provider: "yahoo", notes: "Yahoo symbol for SENSEX" },
+    {
+      symbol: "^NSEBANK",
+      label: "BANK NIFTY",
+      provider: "yahoo",
+      notes: "Yahoo symbol for NIFTY Bank",
+    },
   ],
   GLOBAL: [
-    { symbol: "^GSPC", label: "S&P 500" },
-    { symbol: "^IXIC", label: "NASDAQ Composite" },
-    { symbol: "^NSEI", label: "NIFTY 50" },
-    { symbol: "^FTSE", label: "FTSE 100" },
-    { symbol: "^N225", label: "Nikkei 225" },
+    { symbol: "^GSPC", label: "S&P 500", provider: "yahoo", notes: "Yahoo symbol for S&P 500" },
+    {
+      symbol: "^IXIC",
+      label: "NASDAQ Composite",
+      provider: "yahoo",
+      notes: "Yahoo symbol for Nasdaq Composite",
+    },
+    { symbol: "^NSEI", label: "NIFTY 50", provider: "yahoo", notes: "Yahoo symbol for NIFTY 50" },
+    { symbol: "^FTSE", label: "FTSE 100", provider: "yahoo", notes: "Yahoo symbol for FTSE 100" },
+    {
+      symbol: "^N225",
+      label: "Nikkei 225",
+      provider: "yahoo",
+      notes: "Yahoo symbol for Nikkei 225",
+    },
   ],
 };
 

@@ -10,16 +10,11 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Setup Bun
-        uses: oven-sh/setup-bun@v2
-        with:
-          bun-version: latest
-
       - name: Install dependencies
-        run: bun install --frozen-lockfile
+        run: npm install
 
       - name: Build backend
-        run: bun run build
+        run: npm run build
 
       - name: Deploy Cloudflare Worker
         uses: cloudflare/wrangler-action@v3

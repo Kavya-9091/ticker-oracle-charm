@@ -1,7 +1,12 @@
 import { useQuery } from "@tanstack/react-query";
 import { Activity, ArrowDownRight, ArrowUpRight, Loader2 } from "lucide-react";
 
-import { hasRemoteApi, isStaticFrontend, missingBackendMessage, remoteApi } from "@/lib/frontend-api";
+import {
+  hasRemoteApi,
+  isStaticFrontend,
+  missingBackendMessage,
+  remoteApi,
+} from "@/lib/frontend-api";
 import { Button } from "@/components/ui/button";
 import { INDEXES } from "@/lib/universe";
 

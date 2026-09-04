@@ -3,11 +3,13 @@
 // and /v1/finance/search. Requests deliberately send no custom User-Agent —
 // these endpoints reject browser-like agents from server IPs.
 
+import { UNIVERSE } from "./universe.ts";
+
 const HOSTS = ["query1", "query2"] as const;
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
-// In-isolate cache keeps entries after expiry so we can serve stale data when
-// Yahoo rate-limits us instead of failing the request for every visitor.
+// In-isolate cache only serves fresh entries. Expired provider data is not
+// returned as current market data.
 const cache = new Map<string, { at: number; json: any }>();
 const inflight = new Map<string, Promise<any>>();
 const CACHE_MS = 60_000;
@@ -102,15 +104,8 @@ async function yahoo<T>(path: string, cacheMs = CACHE_MS): Promise<T> {
   const p = fetchFresh(path, cacheMs).finally(() => inflight.delete(path));
   inflight.set(path, p);
 
-  try {
-    return (await p) as T;
-  } catch (err) {
-    // Serve stale data rather than an error when the upstream is throttling.
-    if (hit && !/not found/i.test(String((err as Error).message))) return hit.json as T;
-    throw err;
-  }
+  return (await p) as T;
 }
-
 
 const fin = (v: number | null | undefined) =>
   typeof v === "number" && Number.isFinite(v) ? v : null;
@@ -124,6 +119,12 @@ export type Snapshot = {
   exchange: string;
   currency: string;
   quoteType: string;
+  source: "yahoo" | "nasdaq";
+  timestamp: number | null;
+  marketStatus: string | null;
+  isDelayed: boolean;
+  isVerified: boolean;
+  validationWarnings: string[];
   price: number | null;
   previousClose: number | null;
   change: number | null;
@@ -157,7 +158,7 @@ export type Snapshot = {
     capex: number | null;
     revenueGrowth: number | null;
     grossMargin: number | null;
-    operatingMargin: number | null
+    operatingMargin: number | null;
     profitMargin: number | null;
     totalCash: number | null;
     totalDebt: number | null;
@@ -277,7 +278,7 @@ async function fetchYahooSnapshot(symbolRaw: string, range: string): Promise<Sna
   }
 
   const price = fin(meta.regularMarketPrice);
-  const prev = fin(meta.chartPreviousClose) ?? fin(meta.previousClose);
+  const prev = fin(meta.previousClose) ?? fin(meta.chartPreviousClose);
   const change = price !== null && prev !== null ? price - prev : null;
 
   const revenue = last(m, "trailingTotalRevenue") ?? last(m, "annualTotalRevenue");
@@ -317,6 +318,12 @@ async function fetchYahooSnapshot(symbolRaw: string, range: string): Promise<Sna
     exchange: meta.fullExchangeName ?? meta.exchangeName ?? "",
     currency: meta.currency ?? "USD",
     quoteType: meta.instrumentType ?? "",
+    source: "yahoo",
+    timestamp: typeof meta.regularMarketTime === "number" ? meta.regularMarketTime * 1000 : null,
+    marketStatus: typeof meta.marketState === "string" ? meta.marketState : null,
+    isDelayed: true,
+    isVerified: true,
+    validationWarnings: [],
     price,
     previousClose: prev,
     change,
@@ -353,7 +360,8 @@ async function fetchYahooSnapshot(symbolRaw: string, range: string): Promise<Sna
       grossMargin: grossProfit !== null && revenue ? grossProfit / revenue : null,
       operatingMargin: operatingIncome !== null && revenue ? operatingIncome / revenue : null,
       profitMargin: netIncome !== null && revenue ? netIncome / revenue : null,
-      totalCash: last(m, "quarterlyCashAndCashEquivalents") ?? last(m, "annualCashAndCashEquivalents"),
+      totalCash:
+        last(m, "quarterlyCashAndCashEquivalents") ?? last(m, "annualCashAndCashEquivalents"),
       totalDebt,
       totalAssets: last(m, "quarterlyTotalAssets") ?? last(m, "annualTotalAssets"),
       totalLiabilities:
@@ -402,6 +410,96 @@ const notFound = (err: unknown) =>
     String((err as Error)?.message ?? ""),
   );
 
+const isBenchmarkIndex = (symbol: string) => symbol.trim().startsWith("^");
+const isStaleTimestamp = (timestamp: number | null) => {
+  if (timestamp === null) return false;
+  return Date.now() - timestamp > 7 * 24 * 60 * 60 * 1000;
+};
+
+export function normalizeDailyMove(snapshot: Snapshot): Snapshot {
+  const warnings = [...(snapshot.validationWarnings ?? [])];
+  const failClosed = (reason: string): Snapshot => {
+    warnings.push(reason);
+    console.warn(`[market-data-sanity] ${snapshot.symbol}: ${reason}`);
+    return {
+      ...snapshot,
+      price: null,
+      previousClose: null,
+      change: null,
+      changePercent: null,
+      isVerified: false,
+      validationWarnings: warnings,
+    };
+  };
+
+  const price = fin(snapshot.price);
+  const previousClose = fin(snapshot.previousClose);
+  const providerChange = fin(snapshot.change);
+  const providerChangePercent = fin(snapshot.changePercent);
+
+  if (price === null) return failClosed("Missing current price from provider.");
+  if (price <= 0) return failClosed(`Invalid non-positive current price ${price}.`);
+  if (isStaleTimestamp(snapshot.timestamp ?? snapshot.regularMarketTime))
+    return failClosed("Provider timestamp is older than 7 days.");
+
+  if (previousClose === null) {
+    warnings.push("Previous close missing; daily change cannot be verified.");
+    return {
+      ...snapshot,
+      price,
+      previousClose: null,
+      change: null,
+      changePercent: null,
+      isVerified: false,
+      validationWarnings: warnings,
+    };
+  }
+  if (previousClose <= 0) return failClosed(`Invalid previous close ${previousClose}.`);
+
+  const computedChange = price - previousClose;
+  const computedChangePercent = (computedChange / previousClose) * 100;
+  const pointTolerance = Math.max(0.05, Math.abs(computedChange) * 0.02);
+  const pctTolerance = 0.15;
+
+  if (providerChange !== null && Math.abs(providerChange - computedChange) > pointTolerance)
+    return failClosed(
+      `Provider point change ${providerChange} does not match current price minus previous close ${computedChange.toFixed(4)}.`,
+    );
+
+  if (
+    providerChangePercent !== null &&
+    Math.abs(providerChangePercent - computedChangePercent) > pctTolerance
+  )
+    return failClosed(
+      `Provider percent change ${providerChangePercent}% does not match recomputed daily change ${computedChangePercent.toFixed(4)}%.`,
+    );
+
+  if (isBenchmarkIndex(snapshot.symbol) && Math.abs(computedChangePercent) > 10)
+    return failClosed(
+      `Benchmark index daily change ${computedChangePercent.toFixed(
+        2,
+      )}% exceeds the 10% sanity threshold.`,
+    );
+
+  return {
+    ...snapshot,
+    price,
+    previousClose,
+    change: computedChange,
+    changePercent: computedChangePercent,
+    isVerified: true,
+    validationWarnings: warnings,
+  };
+}
+
+function requireVerifiedSnapshot(snapshot: Snapshot): Snapshot {
+  const normalized = normalizeDailyMove(snapshot);
+  if (!normalized.isVerified) {
+    throw new Error("Live market data failed validation and was not displayed.");
+  }
+  return normalized;
+}
+
 // Nasdaq is primary because Yahoo aggressively rate-limits shared server IPs.
 // Yahoo remains a fallback for symbols or temporary failures Nasdaq cannot serve.
 const snapCache = new Map<string, { at: number; snap: Snapshot }>();
@@ -438,11 +536,27 @@ async function buildSnapshot(symbolRaw: string, range: string): Promise<Snapshot
   const { fetchNasdaqSnapshot } = await import("./nasdaq.server");
   const { findUniverse } = await import("./universe");
   const symbol = symbolRaw.trim().toUpperCase();
+
+  if (isBenchmarkIndex(symbol)) {
+    try {
+      return requireVerifiedSnapshot(await fetchYahooSnapshot(symbolRaw, range));
+    } catch (primaryError) {
+      try {
+        return requireVerifiedSnapshot(await fetchNasdaqSnapshot(symbolRaw, range));
+      } catch (fallbackError) {
+        if (notFound(primaryError) || notFound(fallbackError)) {
+          throw new Error(`We couldn\u2019t find market data for \u201C${symbol}\u201D.`);
+        }
+        throw new Error("Live market data is temporarily unavailable. Please try again shortly.");
+      }
+    }
+  }
+
   try {
-    return await fetchNasdaqSnapshot(symbolRaw, range);
+    return requireVerifiedSnapshot(await fetchNasdaqSnapshot(symbolRaw, range));
   } catch (primaryError) {
     try {
-      return await fetchYahooSnapshot(symbolRaw, range);
+      return requireVerifiedSnapshot(await fetchYahooSnapshot(symbolRaw, range));
     } catch (fallbackError) {
       if (!findUniverse(symbol) && (notFound(primaryError) || notFound(fallbackError))) {
         throw new Error(
@@ -455,6 +569,34 @@ async function buildSnapshot(symbolRaw: string, range: string): Promise<Snapshot
 }
 
 export async function searchSymbols(query: string): Promise<SearchHit[]> {
+  const localHits = () => {
+    const q = query.trim().toLowerCase();
+    if (!q) return [];
+    const aliases = new Map([
+      ["google", "GOOGL"],
+      ["alphabet", "GOOGL"],
+      ["facebook", "META"],
+      ["meta", "META"],
+      ["berkshire", "BRK.B"],
+    ]);
+    const aliasSymbol = aliases.get(q);
+    return UNIVERSE.filter(
+      (u) =>
+        u.symbol === aliasSymbol ||
+        u.symbol.toLowerCase().includes(q) ||
+        u.name.toLowerCase().includes(q),
+    )
+      .slice(0, 8)
+      .map((u) => ({
+        symbol: u.symbol,
+        name: u.name,
+        exchange: u.market === "IN" ? "NSE" : "US",
+        type: "Equity",
+        sector: u.sector,
+        industry: null,
+      }));
+  };
+
   try {
     const { searchNasdaq } = await import("./nasdaq.server");
     const hits = await searchNasdaq(query);
@@ -463,12 +605,12 @@ export async function searchSymbols(query: string): Promise<SearchHit[]> {
     /* fall through to Yahoo */
   }
   try {
-    return await searchYahooSymbols(query);
+    const hits = await searchYahooSymbols(query);
+    return hits.length ? hits : localHits();
   } catch {
-    return [];
+    return localHits();
   }
 }
-
 
 // --- Extra reads used by the AI agent tools -------------------------------
 // Daily OHLCV bars (needed for technical indicators — the snapshot chart uses
@@ -507,6 +649,7 @@ export async function fetchDailyBars(symbolRaw: string, range = "1y"): Promise<D
 
 export type NewsItem = {
   title: string;
+  summary: string | null;
   publisher: string;
   publishedAt: number | null;
   link: string;
@@ -525,8 +668,15 @@ export async function fetchNews(query: string, count = 10): Promise<NewsItem[]> 
       .filter((n: any) => n?.title)
       .map((n: any) => ({
         title: String(n.title),
+        summary:
+          typeof n.summary === "string"
+            ? n.summary
+            : typeof n.content === "string"
+              ? n.content
+              : null,
         publisher: String(n.publisher ?? ""),
-        publishedAt: typeof n.providerPublishTime === "number" ? n.providerPublishTime * 1000 : null,
+        publishedAt:
+          typeof n.providerPublishTime === "number" ? n.providerPublishTime * 1000 : null,
         link: String(n.link ?? ""),
         relatedTickers: Array.isArray(n.relatedTickers) ? n.relatedTickers.map(String) : [],
       }));

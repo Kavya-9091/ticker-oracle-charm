@@ -70,19 +70,14 @@ async function nq<T>(path: string, cacheMs = 60_000): Promise<T> {
   })().finally(() => inflight.delete(path));
 
   inflight.set(path, request);
-  try {
-    return (await request) as T;
-  } catch (error) {
-    if (hit) return hit.json as T;
-    throw error;
-  }
+  return (await request) as T;
 }
 
 const num = (v: unknown): number | null => {
   if (typeof v === "number") return Number.isFinite(v) ? v : null;
   if (typeof v !== "string") return null;
   const neg = /^\(.*\)$/.test(v.trim());
-  const cleaned = v.replace(/[^0-9.\-]/g, "");
+  const cleaned = v.replace(/[^0-9.-]/g, "");
   if (!cleaned || cleaned === "-" || cleaned === ".") return null;
   const n = Number(cleaned);
   if (!Number.isFinite(n)) return null;
@@ -207,13 +202,13 @@ export async function fetchNasdaqSnapshot(symbolRaw: string, range: string): Pro
 
   const price = num(d.primaryData?.lastSalePrice);
   const change = num(d.primaryData?.netChange);
-  const changePercent = num(d.primaryData?.percentageChange);
   const down = (d.primaryData?.deltaIndicator ?? "") === "down";
   const signedChange = change === null ? null : down ? -Math.abs(change) : Math.abs(change);
-  const signedPct =
-    changePercent === null ? null : down ? -Math.abs(changePercent) : Math.abs(changePercent);
   const previousClose =
-    num(sv("PreviousClose")) ?? (price !== null && signedChange !== null ? price - signedChange : null);
+    num(sv("PreviousClose")) ??
+    (price !== null && signedChange !== null ? price - signedChange : null);
+  const signedPct =
+    signedChange !== null && previousClose ? (signedChange / previousClose) * 100 : null;
 
   const [hi52, lo52] = (sv("FiftTwoWeekHighLow") ?? "").split("/");
   const [dayHi, dayLo] = (d.keyStats?.dayrange?.value ?? sv("TodayHighLow") ?? "").split("-");
@@ -266,6 +261,7 @@ export async function fetchNasdaqSnapshot(symbolRaw: string, range: string): Pro
     .filter((p) => p.period && (p.revenue !== null || p.netIncome !== null));
 
   const revPrev = revenues[1] ?? null;
+  const latestCandleTime = candles.length ? (candles[candles.length - 1]?.t ?? null) : null;
 
   return {
     symbol: d.symbol,
@@ -273,6 +269,13 @@ export async function fetchNasdaqSnapshot(symbolRaw: string, range: string): Pro
     exchange: d.exchange ?? sv("Exchange") ?? "",
     currency: d.primaryData?.currency ?? "USD",
     quoteType: d.stockType ?? d.assetClass ?? "",
+    source: "nasdaq",
+    timestamp: latestCandleTime,
+    marketStatus:
+      typeof d.primaryData?.marketStatus === "string" ? d.primaryData.marketStatus : null,
+    isDelayed: true,
+    isVerified: true,
+    validationWarnings: [],
     price,
     previousClose,
     change: signedChange,
@@ -282,7 +285,7 @@ export async function fetchNasdaqSnapshot(symbolRaw: string, range: string): Pro
     volume: num(d.primaryData?.volume) ?? num(sv("ShareVolume")),
     fiftyTwoWeekHigh: num(hi52),
     fiftyTwoWeekLow: num(lo52),
-    regularMarketTime: null,
+    regularMarketTime: latestCandleTime,
     candles,
     annual,
     profile: { sector: sv("Sector"), industry: sv("Industry") },
@@ -323,7 +326,10 @@ export async function fetchNasdaqSnapshot(symbolRaw: string, range: string): Pro
 export async function searchNasdaq(query: string): Promise<SearchHit[]> {
   const q = query.trim();
   if (!q) return [];
-  const j = await nq<any>(`/api/autocomplete/slookup/10?search=${encodeURIComponent(q)}`, 5 * 60_000);
+  const j = await nq<any>(
+    `/api/autocomplete/slookup/10?search=${encodeURIComponent(q)}`,
+    5 * 60_000,
+  );
   return (j?.data ?? [])
     .filter((x: any) => x?.symbol)
     .map((x: any) => ({

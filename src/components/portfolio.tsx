@@ -44,7 +44,10 @@ export function Portfolio({ activeSymbol, onSelect, onAskAi }: Props) {
     const qty = Number(quantity);
     const buy = Number(price);
     if (!sym || !Number.isFinite(qty) || qty <= 0 || !Number.isFinite(buy) || buy <= 0) return;
-    persist([...holdings.filter((h) => h.symbol !== sym), { symbol: sym, quantity: qty, price: buy }]);
+    persist([
+      ...holdings.filter((h) => h.symbol !== sym),
+      { symbol: sym, quantity: qty, price: buy },
+    ]);
     setQuantity("");
     setPrice("");
   };
