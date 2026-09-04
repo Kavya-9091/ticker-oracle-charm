@@ -125,7 +125,7 @@ function extractProfile(message: string) {
         : null;
   const beginner = /don't know|dont know|beginner|new to|explain how|how it work|how does.*work/i.test(message);
   const wantsWhichStock =
-    /which stock|what stock|should i buy|stock.*buy|research.*stock|make profit|profit|shortlist|candidate/i.test(
+    /which stock|what stock|which one|best stock|good for|should i buy|stock.*buy|buy.*stock|research.*stock|make profit|profit|shortlist|candidate/i.test(
       message,
     );
   const months = horizonMatch && /month/i.test(horizonMatch[2]!) ? Number(horizonMatch[1]) : null;
@@ -418,7 +418,7 @@ ${profile.beginner ? "Since you're new to investing, I'll keep this simple. A st
 - Market: **${market === "IN" ? "India, inferred from INR/Rs" : "US"}**
 - Goal: **potential capital appreciation**
 
-For a 4-month horizon, profit is possible but not predictable. I ranked candidates using momentum, volume, fundamentals, valuation, volatility, and recent news. These are research candidates, not guaranteed-profit picks.
+For a ${profile.horizon ?? "short"} horizon, profit is possible but not predictable. I ranked candidates using momentum, volume, fundamentals, valuation, volatility, and recent news. These are research candidates, not guaranteed-profit picks.
 
 ${rows}
 
@@ -429,7 +429,7 @@ ${rows}
 ${allocation}
 | Cash buffer | ${currency}${Math.round(amount * 0.1).toLocaleString("en-US")} |
 
-This avoids assuming one stock is guaranteed to win. Four months is a short period, and losses are possible.`,
+This avoids assuming one stock is guaranteed to win. A ${profile.horizon ?? "short"} horizon is relatively short for equities, and losses are possible.`,
   };
 }
 
@@ -451,7 +451,7 @@ Ask me for quotes, full stock analysis, comparisons, market summaries, screeners
 }
 
 function answerInvestmentResearch(message: string) {
-  const hasHorizon = /\b(1 year|3 years|5 years|long|short|month|horizon)\b/i.test(message);
+  const hasHorizon = /\b(\d+\s*(?:year|years|yr|yrs|month|months)|long|short|horizon)\b/i.test(message);
   const hasRisk = /\b(low|moderate|medium|high|risk)\b/i.test(message);
   if (!hasHorizon || !hasRisk) {
     return {
@@ -496,6 +496,132 @@ No stock is guaranteed to rise. Market performance is uncertain, and this is edu
   };
 }
 
+type Holding = { symbol: string; qty: number; price: number | null };
+
+function resolveSymbol(token: string) {
+  const upper = token.toUpperCase();
+  const universe = UNIVERSE.find((u) => u.symbol === upper || u.symbol.split(".")[0] === upper);
+  return universe?.symbol ?? (/^[A-Z]{1,5}(\.[A-Z]{2})?$/.test(token) ? upper : null);
+}
+
+function parseHoldings(text: string): Holding[] {
+  const skip = new Set([
+    "STOCK", "STOCKS", "QUANTITY", "QTY", "PURCHASE", "PRICE", "SYMBOL", "HOLDING",
+    "HOLDINGS", "SHARE", "SHARES", "AVG", "TOTAL", "MY", "THE", "AND", "FOR",
+  ]);
+  const out: Holding[] = [];
+  const seen = new Set<string>();
+
+  // Line-based rows: "AAPL 5 180" or "| AAPL | 5 | 180 |"
+  for (const rawLine of text.split(/\n/)) {
+    const line = rawLine.replace(/\|/g, " ").replace(/,/g, "").trim();
+    const m = line.match(/^([A-Za-z]{1,5}(?:\.[A-Za-z]{2})?)\s+([\d.]+)(?:\s+([\d.]+))?/);
+    if (!m) continue;
+    const symbol = resolveSymbol(m[1]!);
+    if (!symbol || skip.has(symbol) || seen.has(symbol)) continue;
+    seen.add(symbol);
+    out.push({ symbol, qty: Number(m[2]), price: m[3] ? Number(m[3]) : null });
+  }
+
+  // Glued table paste: "BAC163.04 CRM105000" (symbol stuck to first number)
+  if (!out.length) {
+    for (const m of text.replace(/,/g, "").matchAll(/([A-Za-z]{1,5}(?:\.[A-Za-z]{2})?)(\d+(?:\.\d+)?)/g)) {
+      const symbol = resolveSymbol(m[1]!);
+      if (!symbol || skip.has(symbol) || seen.has(symbol)) continue;
+      const digits = m[2]!;
+      let qty = Number(digits);
+      let price: number | null = null;
+      const dot = digits.indexOf(".");
+      if (dot > 1) {
+        // Assume the price carries the decimals: "163.04" -> qty 1, price 63.04
+        const intPart = digits.slice(0, dot);
+        qty = Number(intPart.slice(0, -2) || intPart);
+        price = Number(`${intPart.slice(-2)}${digits.slice(dot)}`);
+        if (!Number.isFinite(qty) || qty <= 0) qty = 1;
+      }
+      seen.add(symbol);
+      out.push({ symbol, qty, price });
+    }
+  }
+  return out.slice(0, 12);
+}
+
+async function answerPortfolio(holdings: Holding[]) {
+  const rows = await Promise.all(
+    holdings.map(async (h) => ({ h, snap: await quote(h.symbol).catch(() => null) })),
+  );
+  const valued = rows.map(({ h, snap }) => ({
+    h,
+    snap,
+    live: snap?.price ?? null,
+    current: snap?.price != null ? h.qty * snap.price : null,
+    invested: h.price != null ? h.qty * h.price : null,
+  }));
+  const total = valued.reduce((s, r) => s + (r.current ?? 0), 0);
+  const totalInvested = valued.reduce((s, r) => s + (r.invested ?? 0), 0);
+
+  const table = valued
+    .map((r) => {
+      const weight = r.current != null && total > 0 ? (r.current / total) * 100 : null;
+      const pl =
+        r.invested != null && r.current != null && r.invested > 0
+          ? ((r.current - r.invested) / r.invested) * 100
+          : null;
+      return `| ${r.h.symbol} | ${r.h.qty} | ${r.h.price != null ? fmtNum(r.h.price) : "not given"} | ${fmtNum(r.live)} | ${r.current != null ? fmtNum(r.current) : "unavailable"} | ${weight != null ? `${weight.toFixed(1)}%` : "-"} | ${pl != null ? `${pl.toFixed(2)}%` : "-"} |`;
+    })
+    .join("\n");
+
+  const sectors = new Map<string, number>();
+  for (const r of valued) {
+    if (r.current == null) continue;
+    const sector = r.snap?.profile.sector ?? "Unknown";
+    sectors.set(sector, (sectors.get(sector) ?? 0) + r.current);
+  }
+  const sectorRows = [...sectors.entries()]
+    .sort((a, b) => b[1] - a[1])
+    .map(([s, v]) => `- **${s}**: ${total > 0 ? ((v / total) * 100).toFixed(1) : "0"}%`)
+    .join("\n");
+
+  const top = valued
+    .filter((r) => r.current != null)
+    .sort((a, b) => (b.current ?? 0) - (a.current ?? 0))[0];
+  const topWeight = top?.current != null && total > 0 ? ((top.current / total) * 100).toFixed(1) : null;
+  const totalPl =
+    totalInvested > 0 && total > 0 ? (((total - totalInvested) / totalInvested) * 100).toFixed(2) : null;
+  const missingPrices = valued.filter((r) => r.h.price == null).map((r) => r.h.symbol);
+
+  return {
+    tools: ["analyze_portfolio", "get_stock_quote", "get_company_profile"],
+    asOf: new Date().toISOString(),
+    markdown: `### Portfolio Analysis
+
+${table ? `| Stock | Qty | Buy price | Live price | Current value | Weight | P/L |\n|---|---:|---:|---:|---:|---:|---:|\n${table}` : "No holdings could be read."}
+
+**Current portfolio value:** ${total > 0 ? fmtNum(total) : "unavailable"}${totalPl !== null ? ` · **Overall P/L:** ${totalPl}%` : ""}
+
+### Sector Exposure
+${sectorRows || "- Sector data unavailable"}
+
+### Concentration Risk
+${top && topWeight !== null ? `Largest position is **${top.h.symbol}** at **${topWeight}%** of current value. ${Number(topWeight) > 40 ? "That is a high single-stock concentration — a sharp move in one company drives most of your result." : Number(topWeight) > 25 ? "Moderate concentration — acceptable for some investors, but worth monitoring." : "Reasonably spread across positions."}` : "Concentration could not be computed from available data."}
+
+${valued.length <= 2 ? "With only " + valued.length + " holding(s), diversification is limited. Many investors spread across 5-15 stocks or use a broad fund to reduce single-company risk.\n\n" : ""}${missingPrices.length ? `Note: purchase price was unclear for ${missingPrices.join(", ")}, so P/L for those uses live prices only. Resend as \`SYMBOL quantity buyPrice\` (e.g. \`BAC 1 63.04\`) for exact figures.\n\n` : ""}This is educational analysis based on live prices, not investment advice.`,
+  };
+}
+
+const PORTFOLIO_INTAKE = `### Portfolio Analysis
+
+I can help analyze concentration risk, sector exposure, underperforming positions, volatility, diversification, and allocation.
+
+To start, send holdings like this:
+
+| Stock | Quantity | Purchase price |
+|---|---:|---:|
+| AAPL | 5 | 180 |
+| MSFT | 3 | 310 |
+
+I will not buy or sell anything. I will only provide educational analysis and risk observations.`;
+
 export async function runStockAgent(
   message: string,
   history: ChatMessage[] = [],
@@ -519,22 +645,12 @@ export async function runStockAgent(
         : intent === "INVESTMENT_RESEARCH"
         ? answerInvestmentResearch(effectiveMessage)
         : intent === "PORTFOLIO_ANALYSIS"
-          ? {
-              tools: ["analyze_portfolio"],
-              asOf: new Date().toISOString(),
-              markdown: `### Portfolio Analysis
-
-I can help analyze concentration risk, sector exposure, underperforming positions, volatility, diversification, and allocation.
-
-To start, send holdings like this:
-
-| Stock | Quantity | Purchase price |
-|---|---:|---:|
-| AAPL | 5 | 180 |
-| MSFT | 3 | 310 |
-
-I will not buy or sell anything. I will only provide educational analysis and risk observations.`,
-            }
+          ? await (async () => {
+              const holdings = parseHoldings(effectiveMessage);
+              return holdings.length
+                ? await answerPortfolio(holdings)
+                : { tools: ["analyze_portfolio"], asOf: new Date().toISOString(), markdown: PORTFOLIO_INTAKE };
+            })()
           : intent === "QUOTE" && symbols[0]
         ? await answerQuote(symbols[0])
         : intent === "STOCK_COMPARISON" && symbols.length >= 2
