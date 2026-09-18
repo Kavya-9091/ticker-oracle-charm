@@ -1,0 +1,4 @@
+export const STRIPE_PUBLISHABLE_KEY =
+  "pk_test_51UFv6eJDpMzbYa1RinEYcmbUwTuQs4phQv3PbW24ZqFtkrjiXpCZTfWIytN6PeCOSFUmk1YpPU1CqF6VJ4JpRjXj00Pj40e9SC";
+
+export const STRIPE_DEFAULT_PRICE_ID = "price_1UFvMDJDpMzbYa1RsyZnwneT";
