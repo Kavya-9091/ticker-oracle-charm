@@ -104,6 +104,7 @@ function serviceUnavailable(error: unknown) {
 async function handleApiRequest(request: Request): Promise<Response | null> {
   const url = new URL(request.url);
   if (!url.pathname.startsWith("/api/")) return null;
+  if (url.pathname.startsWith("/api/public/")) return null;
 
   if (request.method === "OPTIONS") {
     return new Response(null, { status: 204, headers: corsHeaders(request) });

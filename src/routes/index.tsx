@@ -80,6 +80,31 @@ function Home() {
   const [aiPrompt, setAiPrompt] = useState<{ text: string; id: number } | null>(null);
   const askAi = (text: string) => setAiPrompt({ text, id: Date.now() });
 
+  const [checkout, setCheckout] = useState<{ loading: boolean; error: string | null }>({
+    loading: false,
+    error: null,
+  });
+  const handleCheckout = async () => {
+    setCheckout({ loading: true, error: null });
+    try {
+      const res = await fetch("/api/public/stripe/checkout", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({}),
+      });
+      const data = (await res.json().catch(() => ({ error: "Unexpected response" }))) as {
+        url?: string;
+        error?: string;
+      };
+      if (!res.ok || !data.url) {
+        throw new Error(data.error || "Checkout failed");
+      }
+      window.location.href = data.url;
+    } catch (err) {
+      setCheckout({ loading: false, error: (err as Error).message });
+    }
+  };
+
   const snapshot = useQuery({
     queryKey: ["snapshot", symbol, range],
     queryFn: async () => {
@@ -391,6 +416,29 @@ function Home() {
         <StockList active={symbol} onSelect={(s) => submit(s)} />
         <Watchlist activeSymbol={symbol} onSelect={(s) => submit(s)} onAskAi={askAi} />
         <Portfolio activeSymbol={symbol} onSelect={(s) => submit(s)} onAskAi={askAi} />
+
+        <section className="panel-surface rounded-xl p-4">
+          <h3 className="text-sm font-semibold tracking-wide text-primary uppercase">
+            Premium
+          </h3>
+          <p className="mt-1 text-xs text-muted-foreground">
+            Unlock full AI research reports and advanced market tools.
+          </p>
+          <Button
+            onClick={handleCheckout}
+            disabled={checkout.loading}
+            className="mt-3 w-full"
+          >
+            {checkout.loading ? (
+              <Loader2 className="size-4 animate-spin" />
+            ) : (
+              "Subscribe"
+            )}
+          </Button>
+          {checkout.error && (
+            <p className="mt-2 text-xs text-destructive">{checkout.error}</p>
+          )}
+        </section>
       </aside>
       <Suspense fallback={null}>
         <AiStockAgent
